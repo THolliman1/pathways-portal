@@ -43,6 +43,19 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .btn-signin:hover{background:var(--blue)}
 .btn-signin img{width:20px;height:20px}
 .signin-note{font-size:11px;color:var(--text-3);margin-top:12px}
+.gate-screen{position:fixed;inset:0;background:var(--blue-dark);display:flex;align-items:center;justify-content:center;z-index:99999}
+.gate-screen.hidden{display:none}
+.gate-box{background:white;border-radius:20px;padding:2.5rem 3rem;width:420px;max-width:95vw;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.25)}
+.gate-logo{width:54px;height:54px;border-radius:13px;background:var(--blue-dark);color:white;font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:center;margin:0 auto 1.2rem;letter-spacing:-0.5px}
+.gate-title{font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px}
+.gate-sub{font-size:13px;color:var(--text-3);margin-bottom:1.5rem}
+.gate-input{width:100%;padding:12px 16px;font-size:15px;border:2px solid var(--border);border-radius:var(--radius);font-family:inherit;color:var(--text);background:var(--bg);transition:border-color 0.15s;text-align:center;letter-spacing:0.05em;margin-bottom:12px;box-sizing:border-box}
+.gate-input:focus{outline:none;border-color:var(--blue);background:white}
+.gate-input.shake{animation:shake 0.3s}
+.gate-btn{width:100%;padding:12px;font-size:14px;font-weight:700;border-radius:var(--radius);border:none;background:var(--blue-dark);color:white;cursor:pointer;font-family:inherit;transition:background 0.15s}
+.gate-btn:hover{background:var(--blue)}
+.gate-error{font-size:12px;color:var(--red);margin-top:8px;min-height:18px}
+.gate-note{font-size:11px;color:var(--text-3);margin-top:14px}
 .role-screen{position:fixed;inset:0;background:var(--blue-dark);display:flex;align-items:center;justify-content:center;z-index:9999}
 .role-screen.hidden{display:none}
 .role-box{background:white;border-radius:20px;padding:2.5rem 3rem;width:440px;max-width:95vw;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.25)}
@@ -428,6 +441,20 @@ table.notes tbody tr.missing-row:hover td{background:#FFF0CC}
 </style>
 </head>
 <body>
+
+<!-- PASSWORD GATE -->
+<div class="gate-screen" id="gate-screen">
+  <div class="gate-box">
+    <div class="gate-logo">PPC</div>
+    <div class="gate-title">Pathways Portal</div>
+    <div class="gate-sub">Ortho Plus Management — Enter access password</div>
+    <input class="gate-input" type="password" id="gate-input" placeholder="Enter password"
+      onkeydown="if(event.key==='Enter')gateSubmit()" autocomplete="off"/>
+    <button class="gate-btn" onclick="gateSubmit()">Continue</button>
+    <div class="gate-error" id="gate-error"></div>
+    <div class="gate-note">Contact OPM to receive access credentials</div>
+  </div>
+</div>
 
 <!-- ROLE SELECTOR -->
 <div class="role-screen" id="role-screen">
@@ -877,17 +904,18 @@ const MSAL_CONFIG = {
   auth: {
     clientId: '2d743f1f-aa6d-478f-9bfc-985829914e48',
     authority: 'https://login.microsoftonline.com/066313fa-9d02-4763-8f69-64e1f5d36fe7',
-    redirectUri: 'http://localhost',
+    redirectUri: window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '/') || 'https://tholliman1.github.io/pathways-portal',
+    navigateToLoginRequestUrl: false,
   },
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
 };
 const GRAPH_SCOPES = ['Files.ReadWrite.All', 'User.Read'];
 const DATA_FILE = 'claims_data.json';
-const FOLDER_PATH = 'Corporate/PATHWAYS Beta';
+const FOLDER_PATH = 'Pathways Beta';
 
 // Build the correct Graph API URL for the file
 function getFileURL() {
-  return `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent('Corporate/PATHWAYS Beta')}/${DATA_FILE}:/content`;
+  return `https://graph.microsoft.com/v1.0/me/drive/root:/Pathways%20Beta/${DATA_FILE}:/content`;
 }
 
 let msalInstance = null;
@@ -1620,11 +1648,35 @@ document.addEventListener('keydown',e=>{
   }
 });
 
+// ── Password Gate ────────────────────────────────────────────
+const GATE_PASSWORD = 'PathwaysTest2016';
+function gateSubmit(){
+  const input=document.getElementById('gate-input');
+  const errEl=document.getElementById('gate-error');
+  const val=input.value.trim();
+  if(val===GATE_PASSWORD){
+    document.getElementById('gate-screen').classList.add('hidden');
+    localStorage.setItem('opm_gate_pass','1');
+    errEl.textContent='';
+  } else {
+    input.classList.add('shake');
+    errEl.textContent='Incorrect password. Please try again.';
+    input.value='';
+    setTimeout(()=>input.classList.remove('shake'),400);
+  }
+}
+
 // ── Init ─────────────────────────────────────────────────────
 // Clear stale data from old versions
 ['opm_ppc_','opm_ppc2_','opm_ppc3_','opm_ppc4_','opm_ppc5_','opm_ppc6_'].forEach(oldKey=>{
   ['prov','cards','log','count','role','pdfs'].forEach(k=>localStorage.removeItem(oldKey+k));
 });
+// Check gate password
+if(!localStorage.getItem('opm_gate_pass')){
+  // Gate stays visible — user must enter password first
+} else {
+  document.getElementById('gate-screen').classList.add('hidden');
+}
 document.getElementById('prov-date').value=today();
 
 // Initialize MSAL then restore role
