@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pathways Portal — OPM</title>
+<!-- Microsoft Authentication Library -->
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#5B9EC9;--blue-dark:#3A7EAD;--blue-light:#EAF4FB;--blue-mid:#A8D1EC;
+  --bg:#F4F7FA;--surface:#FFFFFF;--border:#D8E4EE;--border-mid:#B8CEDE;
+  --text:#2C3340;--text-2:#5A6478;--text-3:#94A0B0;
+  --red:#D94040;--red-light:#FEF0F0;
+  --green:#2E8B6A;--green-light:#E6F5EF;--green-mid:#7EC9A8;
+  --amber:#B8760B;--amber-light:#FFF4E0;--amber-mid:#F0D060;
+  --radius:10px;--radius-lg:14px;
+  --shadow-sm:0 1px 4px rgba(91,158,201,0.08);
+  --shadow:0 4px 16px rgba(91,158,201,0.13);
+}
+html{font-size:15px}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* ── ONEDRIVE SYNC STATUS ── */
+.sync-bar{display:flex;align-items:center;gap:8px;padding:8px 16px;font-size:12px;font-weight:500}
+.sync-bar.syncing{background:#FFF8E1;color:#B8760B;border-bottom:1px solid #F0D060}
+.sync-bar.synced{background:var(--green-light);color:var(--green);border-bottom:1px solid var(--green-mid)}
+.sync-bar.error{background:var(--red-light);color:var(--red);border-bottom:1px solid #F5A0A0}
+.sync-bar.signing-in{background:var(--blue-light);color:var(--blue-dark);border-bottom:1px solid var(--blue-mid)}
+.sync-spinner{width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.sync-icon{font-size:14px;flex-shrink:0}
+
+/* ── SIGN IN OVERLAY ── */
+.signin-overlay{position:fixed;inset:0;background:rgba(26,47,74,0.88);display:flex;align-items:center;justify-content:center;z-index:9998}
+.signin-overlay.hidden{display:none}
+.signin-box{background:white;border-radius:18px;padding:2.5rem;width:380px;max-width:95vw;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,0.22)}
+.signin-logo{font-size:40px;margin-bottom:12px}
+.signin-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px}
+.signin-sub{font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:1.5rem}
+.btn-signin{width:100%;padding:12px;font-size:14px;font-weight:600;border-radius:var(--radius);border:none;background:var(--blue-dark);color:white;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:10px;transition:background 0.15s}
+.btn-signin:hover{background:var(--blue)}
+.btn-signin img{width:20px;height:20px}
+.signin-note{font-size:11px;color:var(--text-3);margin-top:12px}
+.role-screen{position:fixed;inset:0;background:var(--blue-dark);display:flex;align-items:center;justify-content:center;z-index:9999}
+.role-screen.hidden{display:none}
+.role-box{background:white;border-radius:20px;padding:2.5rem 3rem;width:440px;max-width:95vw;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.25)}
+.role-logo{width:54px;height:54px;border-radius:13px;background:var(--blue-dark);color:white;font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:center;margin:0 auto 1.2rem;letter-spacing:-0.5px}
+.role-title{font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px}
+.role-sub{font-size:13px;color:var(--text-3);margin-bottom:2rem}
+.role-btns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.role-btn{padding:1.2rem 1rem;border-radius:var(--radius-lg);border:2px solid var(--border);background:var(--bg);cursor:pointer;transition:all 0.15s;font-family:inherit;text-align:center}
+.role-btn:hover{border-color:var(--blue);background:var(--blue-light)}
+.role-btn-icon{font-size:28px;margin-bottom:8px}
+.role-btn-label{font-size:14px;font-weight:700;color:var(--text)}
+.role-btn-sub{font-size:11px;color:var(--text-3);margin-top:3px}
+
+/* ── PIN ── */
+.pin-screen{position:fixed;inset:0;background:rgba(26,47,74,0.88);display:flex;align-items:center;justify-content:center;z-index:9999}
+.pin-screen.hidden{display:none}
+.pin-box{background:white;border-radius:18px;padding:2.2rem 2.5rem;width:340px;max-width:95vw;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,0.22)}
+.pin-title{font-size:17px;font-weight:700;color:var(--text);margin-bottom:6px}
+.pin-sub{font-size:12px;color:var(--text-3);margin-bottom:1.4rem}
+.pin-dots{display:flex;justify-content:center;gap:12px;margin-bottom:1.4rem}
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--border-mid);background:transparent;transition:all 0.15s}
+.pin-dot.filled{background:var(--blue-dark);border-color:var(--blue-dark)}
+.pin-dot.error{background:var(--red);border-color:var(--red);animation:shake 0.3s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1rem}
+.pin-key{padding:14px;font-size:18px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg);cursor:pointer;transition:all 0.1s;font-family:inherit;color:var(--text)}
+.pin-key:hover{background:var(--blue-light);border-color:var(--blue-mid)}
+.pin-key:active{transform:scale(0.95)}
+.pin-key.del{font-size:14px;color:var(--text-2)}
+.pin-back{font-size:12px;color:var(--text-3);background:none;border:none;cursor:pointer;font-family:inherit;padding:4px}
+.pin-back:hover{color:var(--blue-dark)}
+.pin-error-msg{font-size:12px;color:var(--red);margin-top:8px;min-height:18px}
+
+/* ── HEADER ── */
+.header{background:var(--blue-dark);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:62px;position:sticky;top:0;z-index:100;box-shadow:0 2px 10px rgba(58,126,173,0.25)}
+.header-left{display:flex;align-items:center;gap:14px}
+.header-logo{width:36px;height:36px;border-radius:9px;background:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--blue-dark);letter-spacing:-0.5px}
+.header-brand{display:flex;flex-direction:column}
+.header-org{font-size:10px;color:rgba(255,255,255,0.6);letter-spacing:0.12em;text-transform:uppercase}
+.header-title{font-size:14px;font-weight:600;color:white}
+.header-right{display:flex;align-items:center;gap:14px}
+.role-pill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;border:1px solid rgba(255,255,255,0.25);color:rgba(255,255,255,0.8);cursor:pointer;transition:all 0.15s;background:transparent;font-family:inherit}
+.role-pill:hover{background:rgba(255,255,255,0.1)}
+.save-indicator{font-size:11px;color:rgba(255,255,255,0.5);display:flex;align-items:center;gap:6px}
+.save-dot{width:6px;height:6px;border-radius:50%;background:#7EC9A8}
+.save-dot.saving{background:#F0C040;animation:pulse 0.8s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* ── NAV ── */
+.nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 2rem;display:flex}
+.nav-tab{padding:16px 24px;font-size:14px;font-weight:500;color:var(--text-2);border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color 0.15s,border-color 0.15s;display:flex;align-items:center;gap:7px;font-family:inherit;text-decoration:none}
+.nav-tab:hover{color:var(--text)}
+.nav-tab.active{color:var(--blue-dark);border-bottom-color:var(--blue-dark);font-weight:600}
+.nav-badge{background:var(--blue);color:white;font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;display:none}
+.nav-badge.visible{display:inline-block}
+.nav-badge.amber{background:var(--amber)}
+
+/* ── LAYOUT ── */
+.main{max-width:1280px;margin:0 auto;padding:2rem 2.5rem}
+.view{display:none}
+.view.active{display:block}
+
+/* ── PROVIDER STRIP ── */
+.provider-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem 1.5rem;margin-bottom:1.5rem;box-shadow:var(--shadow-sm)}
+.section-label{font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);margin-bottom:12px}
+.prov-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.fg{display:flex;flex-direction:column;gap:5px;min-width:0}
+.fg label{font-size:12px;font-weight:600;color:var(--text-2);letter-spacing:0.04em;text-transform:uppercase}
+.fg label .req{color:var(--red);margin-left:2px}
+.fg input,.fg select{font-size:14px;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);width:100%;min-width:0;box-sizing:border-box;transition:border-color 0.15s,box-shadow 0.15s;font-family:inherit}
+.fg input:focus,.fg select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(91,158,201,0.15);background:var(--surface)}
+.claim-hint{font-size:10px;color:var(--text-3);margin-top:3px}
+
+/* ── ADD PATIENT ── */
+.add-btn-wrap{margin-bottom:1rem}
+
+/* ── ALL SUBMITTED BANNER ── */
+.all-submitted{background:var(--green-light);border:1px solid var(--green-mid);border-radius:var(--radius-lg);padding:2rem;text-align:center;margin-bottom:1rem}
+.all-submitted-icon{font-size:28px;margin-bottom:8px}
+.all-submitted-title{font-size:15px;font-weight:700;color:var(--green)}
+.all-submitted-sub{font-size:12px;color:var(--text-2);margin-top:4px}
+
+/* ── PATIENT CARDS ── */
+.patient-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:10px;box-shadow:var(--shadow-sm);overflow:hidden;transition:border-color 0.2s,box-shadow 0.2s}
+.patient-card.has-data{border-color:var(--border-mid)}
+.patient-card.submitted{border-color:var(--blue-mid);background:#FAFCFF}
+.patient-card.open{box-shadow:var(--shadow)}
+.card-header{display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer;user-select:none;transition:background 0.12s}
+.card-header:hover{background:var(--bg)}
+.patient-card.submitted .card-header:hover{background:#F5F9FF}
+.p-num{width:32px;height:32px;border-radius:50%;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text-3);flex-shrink:0;transition:all 0.2s}
+.p-num.filled{background:var(--blue-dark);color:white;border-color:var(--blue-dark)}
+.p-num.done{background:var(--green);color:white;border-color:var(--green)}
+.p-info{flex:1;min-width:0}
+.p-name{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-meta{font-size:12px;color:var(--text-3);margin-top:1px}
+.p-badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+.p-badge.empty{background:var(--bg);color:var(--text-3);border:1px solid var(--border)}
+.p-badge.progress{background:var(--amber-light);color:var(--amber);border:1px solid var(--amber-mid)}
+.p-badge.ready{background:var(--blue-light);color:var(--blue-dark);border:1px solid var(--blue-mid)}
+.p-badge.done{background:var(--green-light);color:var(--green);border:1px solid var(--green-mid)}
+.p-chevron{color:var(--text-3);font-size:11px;transition:transform 0.2s;flex-shrink:0}
+.p-chevron.open{transform:rotate(180deg)}
+.card-body{display:none;padding:1.5rem 1.75rem;border-top:1px solid var(--border)}
+.card-body.open{display:block}
+
+/* ── FORM GRIDS ── */
+.form-row{display:grid;gap:12px;margin-bottom:14px}
+.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+/* ── LINE ITEMS ── */
+.lines-section{margin-bottom:14px}
+.lines-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px}
+.lines-label{font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-3)}
+.add-line-btn{font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px;border:1px solid var(--blue);background:var(--blue-light);color:var(--blue-dark);cursor:pointer;font-family:inherit;transition:all 0.12s;white-space:nowrap}
+.add-line-btn:hover{background:var(--blue);color:white}
+.add-line-btn:disabled{opacity:0.35;cursor:not-allowed}
+.lines-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius)}
+.lines-table{width:100%;min-width:480px;border-collapse:collapse;table-layout:fixed}
+.lines-table col.col-cpt{width:auto}
+.lines-table col.col-units{width:72px}
+.lines-table col.col-rate{width:96px}
+.lines-table col.col-total{width:96px}
+.lines-table col.col-del{width:100px}
+.lines-table thead th{font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-3);padding:9px 10px;background:var(--bg);border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+.lines-table tbody td{padding:8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.lines-table tbody tr:last-child td{border-bottom:none}
+.lines-table tbody tr:hover td{background:#F7FBFF}
+.line-cpt select{font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);width:100%;font-family:inherit;min-width:0}
+.line-cpt select:focus{outline:none;border-color:var(--blue)}
+.line-units input{font-size:13px;padding:7px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);width:56px;text-align:center;font-family:inherit}
+.line-units input:focus{outline:none;border-color:var(--blue)}
+.line-rate{font-size:13px;color:var(--text-2);text-align:right;font-weight:500;padding-right:8px;white-space:nowrap}
+.line-total{font-size:13px;font-weight:700;color:var(--blue-dark);text-align:right;padding-right:8px;white-space:nowrap}
+.del-line-btn{background:var(--red-light);border:1px solid #FFCCCC;color:var(--red);cursor:pointer;font-size:13px;font-weight:700;line-height:1;padding:4px 9px;border-radius:6px;transition:all 0.1s;white-space:nowrap}
+.del-line-btn:hover{background:var(--red);color:white;border-color:var(--red)}
+.lines-footer{display:flex;justify-content:flex-end;align-items:center;gap:20px;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius) var(--radius);flex-wrap:wrap}
+.lf-item{display:flex;align-items:center;gap:6px;font-size:13px}
+.lf-label{color:var(--text-3)}
+.lf-val{font-weight:700;color:var(--text)}
+.lf-val.blue{color:var(--blue-dark);font-size:15px}
+
+/* ── CARD FOOTER ── */
+.card-footer{display:flex;align-items:center;gap:10px;padding-top:14px;margin-top:6px;border-top:1px solid var(--border)}
+.btn-submit-card{flex:1;padding:11px 0;font-size:14px;font-weight:600;border-radius:var(--radius);border:none;background:var(--blue-dark);color:white;cursor:pointer;transition:background 0.15s,opacity 0.15s;font-family:inherit}
+.btn-submit-card:hover:not(:disabled){background:var(--blue)}
+.btn-submit-card:disabled{opacity:0.35;cursor:not-allowed}
+.btn-remove-card{padding:11px 14px;font-size:13px;font-weight:500;border-radius:var(--radius);border:1px solid var(--border);background:transparent;color:var(--text-3);cursor:pointer;font-family:inherit;transition:all 0.12s}
+.btn-remove-card:hover{border-color:var(--red);color:var(--red);background:var(--red-light)}
+.submitted-tag{font-size:12px;font-weight:600;color:var(--green);display:none;align-items:center;gap:5px}
+.submitted-tag.show{display:flex}
+.submitted-tag::before{content:'✓';font-size:14px}
+
+/* ── NOTES UPLOAD (PATHWAYS) ── */
+.notes-upload-wrap{max-width:660px;margin:0 auto}
+.nu-intro{text-align:center;margin-bottom:2rem}
+.nu-intro-icon{font-size:36px;margin-bottom:10px}
+.nu-intro-title{font-size:20px;font-weight:700;color:var(--blue-dark);margin-bottom:6px}
+.nu-intro-sub{font-size:14px;color:var(--text-2);line-height:1.6}
+.nu-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem;box-shadow:var(--shadow-sm)}
+.nu-section-label{font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);margin-bottom:10px}
+.nu-fg{display:flex;flex-direction:column;gap:6px;margin-bottom:20px}
+.nu-fg label{font-size:12px;font-weight:600;color:var(--text-2);letter-spacing:0.04em;text-transform:uppercase}
+.nu-fg select{font-size:14px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);width:100%;font-family:inherit;transition:border-color 0.15s}
+.nu-fg select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(91,158,201,0.15);background:var(--surface)}
+.claim-preview-box{background:var(--blue-light);border:1px solid var(--blue-mid);border-radius:var(--radius);padding:14px 16px;margin-bottom:20px;display:none}
+.claim-preview-box.show{display:block}
+.cpb-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.cpb-row:last-child{margin-bottom:0}
+.cpb-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--blue-dark);width:90px;flex-shrink:0}
+.cpb-val{font-size:13px;color:var(--text);font-weight:500}
+.cpb-claimnum{font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:var(--blue-dark);background:white;padding:2px 8px;border-radius:5px;border:1px solid var(--blue-mid)}
+.already-warn{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--blue-mid);font-size:12px;color:var(--amber);font-weight:600}
+.nu-drop{border:2px dashed var(--border-mid);border-radius:var(--radius-lg);padding:2.5rem 1.5rem;text-align:center;cursor:pointer;transition:all 0.15s;background:var(--bg);position:relative;margin-bottom:20px}
+.nu-drop:hover,.nu-drop.dragover{border-color:var(--blue);background:var(--blue-light)}
+.nu-drop.has-file{border-color:var(--green-mid);background:var(--green-light);border-style:solid}
+.nu-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.nu-drop-icon{font-size:36px;margin-bottom:10px;opacity:0.4;transition:opacity 0.15s}
+.nu-drop.has-file .nu-drop-icon{opacity:1}
+.nu-drop-title{font-size:15px;font-weight:600;color:var(--text-2);margin-bottom:4px}
+.nu-drop.has-file .nu-drop-title{color:var(--green)}
+.nu-drop-sub{font-size:12px;color:var(--text-3)}
+.nu-drop-filename{font-size:13px;font-weight:700;color:var(--green);margin-top:6px;word-break:break-all;display:none}
+.nu-drop-size{font-size:11px;color:var(--text-3);margin-top:2px;display:none}
+.filename-preview-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:20px;display:none}
+.filename-preview-box.show{display:block}
+.fpb-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-3);margin-bottom:6px}
+.fpb-name{font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:var(--blue-dark);word-break:break-all}
+.fpb-hint{font-size:11px;color:var(--text-3);margin-top:4px}
+.btn-submit-note{width:100%;padding:13px;font-size:15px;font-weight:700;border-radius:var(--radius-lg);border:none;background:var(--blue-dark);color:white;cursor:pointer;transition:background 0.15s,opacity 0.15s;font-family:inherit}
+.btn-submit-note:hover:not(:disabled){background:var(--blue)}
+.btn-submit-note:disabled{opacity:0.35;cursor:not-allowed}
+.nu-success{background:var(--green-light);border:1px solid var(--green-mid);border-radius:var(--radius-lg);padding:2rem;text-align:center;box-shadow:var(--shadow-sm);display:none}
+.nu-success.show{display:block}
+.nu-success-icon{font-size:40px;margin-bottom:12px}
+.nu-success-title{font-size:18px;font-weight:700;color:var(--green);margin-bottom:6px}
+.nu-success-sub{font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:14px}
+.nu-success-filename{font-family:'Courier New',monospace;font-size:13px;font-weight:700;color:var(--green);background:white;border:1px solid var(--green-mid);padding:8px 14px;border-radius:var(--radius);display:inline-block;word-break:break-all;margin-bottom:18px}
+.nu-success-btns{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+.btn-redownload{padding:10px 20px;font-size:13px;font-weight:600;border-radius:var(--radius);border:1px solid var(--green-mid);background:white;color:var(--green);cursor:pointer;font-family:inherit;transition:all 0.12s}
+.btn-redownload:hover{background:var(--green);color:white}
+.btn-another{padding:10px 20px;font-size:13px;font-weight:600;border-radius:var(--radius);border:none;background:var(--blue-dark);color:white;cursor:pointer;font-family:inherit;transition:background 0.12s}
+.btn-another:hover{background:var(--blue)}
+.session-uploads{margin-top:2rem}
+.su-title{font-size:13px;font-weight:700;color:var(--text-2);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.su-count{font-size:11px;font-weight:700;background:var(--blue-dark);color:white;padding:2px 7px;border-radius:10px}
+.su-list{display:flex;flex-direction:column;gap:6px}
+.su-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.su-icon{font-size:18px;flex-shrink:0}
+.su-info{flex:1;min-width:0}
+.su-filename{font-family:'Courier New',monospace;font-size:12px;font-weight:700;color:var(--blue-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.su-meta{font-size:11px;color:var(--text-3);margin-top:2px}
+.su-btn{font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;border:1px solid var(--blue-mid);background:var(--blue-light);color:var(--blue-dark);cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;transition:all 0.12s}
+.su-btn:hover{background:var(--blue-dark);color:white}
+.nu-no-claims{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2.5rem;text-align:center;box-shadow:var(--shadow-sm)}
+.nu-no-claims-icon{font-size:32px;margin-bottom:12px;opacity:0.4}
+.nu-no-claims-title{font-size:16px;font-weight:600;color:var(--text-2);margin-bottom:6px}
+.nu-no-claims-sub{font-size:13px;color:var(--text-3);line-height:1.6}
+
+/* ── BILLER LOG ── */
+.log-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:10px}
+.log-title{font-size:20px;font-weight:700;color:var(--blue-dark)}
+.log-sub{font-size:13px;color:var(--text-3);margin-top:3px}
+.log-actions{display:flex;gap:8px}
+.btn-secondary{padding:9px 16px;font-size:13px;font-weight:500;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-family:inherit;transition:all 0.12s}
+.btn-secondary:hover{background:var(--bg);border-color:var(--border-mid)}
+.btn-primary{padding:9px 18px;font-size:13px;font-weight:600;border-radius:var(--radius);border:none;background:var(--blue-dark);color:white;cursor:pointer;font-family:inherit;transition:background 0.12s}
+.btn-primary:hover{background:var(--blue)}
+
+/* ── STATUS FILTER ── */
+.status-filter-bar{display:flex;align-items:center;gap:8px;margin-bottom:1.1rem;flex-wrap:wrap}
+.sf-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-3);margin-right:4px;white-space:nowrap}
+.sf-pill{font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface);color:var(--text-2);cursor:pointer;font-family:inherit;transition:all 0.12s;white-space:nowrap}
+.sf-pill:hover{border-color:var(--blue-mid);color:var(--text)}
+.sf-pill.active{border-color:var(--blue-dark);background:var(--blue-dark);color:white}
+.sf-pill.needs-export.active{border-color:var(--amber);background:var(--amber-light);color:var(--amber)}
+.sf-pill.export-finalized.active{border-color:var(--green);background:var(--green-light);color:var(--green)}
+.sf-pill.paid.active{border-color:var(--green);background:var(--green-light);color:var(--green)}
+.sf-pill.workable.active{border-color:var(--red);background:var(--red-light);color:var(--red)}
+.sf-count{font-size:10px;font-weight:700;padding:1px 5px;border-radius:8px;background:rgba(0,0,0,0.08);margin-left:4px}
+
+/* ── SUMMARY BAR ── */
+.summary-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:1.25rem}
+.summary-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow-sm)}
+.summary-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);margin-bottom:6px}
+.summary-value{font-size:24px;font-weight:700;color:var(--text)}
+.summary-value.blue{color:var(--blue-dark)}
+.summary-value.amber{color:var(--amber)}
+
+/* ── LOG TABLE ── */
+.log-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow-x:auto;overflow-y:visible;box-shadow:var(--shadow-sm)}
+table.log{width:100%;min-width:1100px;border-collapse:collapse;font-size:13px;table-layout:fixed}
+table.log colgroup col:nth-child(1){width:36px}
+table.log colgroup col:nth-child(2){width:120px}
+table.log colgroup col:nth-child(3){width:155px}
+table.log colgroup col:nth-child(4){width:92px}
+table.log colgroup col:nth-child(5){width:92px}
+table.log colgroup col:nth-child(6){width:160px}
+table.log colgroup col:nth-child(7){width:78px}
+table.log colgroup col:nth-child(8){width:160px}
+table.log colgroup col:nth-child(9){width:58px}
+table.log colgroup col:nth-child(10){width:86px}
+table.log colgroup col:nth-child(11){width:86px}
+table.log colgroup col:nth-child(12){width:130px}
+table.log colgroup col:nth-child(13){width:120px}
+table.log colgroup col:nth-child(14){width:38px}
+table.log thead th{font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-3);padding:12px;background:var(--bg);border-bottom:1px solid var(--border);white-space:nowrap;text-align:left;overflow:hidden}
+table.log tbody td{padding:11px 12px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+table.log tbody tr:last-child td{border-bottom:none}
+table.log tbody tr:hover td{background:#F7FBFF}
+.td-mono{font-family:'Courier New',monospace;font-size:12px;color:var(--text-2)}
+.td-amt{font-weight:500;text-align:right}
+.td-total{font-weight:700;color:var(--blue-dark);text-align:right}
+.subtotal-row td{background:var(--blue-light)!important}
+.spacer-row td{padding:3px 0;background:var(--bg)!important;border-bottom:none!important}
+.status-select{font-size:11px;font-weight:600;padding:4px 9px;border-radius:20px;border:1px solid;cursor:pointer;font-family:inherit;background:transparent;appearance:none;-webkit-appearance:none}
+.status-select.needs-export{background:var(--amber-light);color:var(--amber);border-color:var(--amber-mid)}
+.status-select.export-finalized{background:var(--green-light);color:var(--green);border-color:var(--green-mid)}
+.status-select.submitted{background:#F0E6FF;color:#6B21A8;border-color:#C4B5FD}
+.status-select.paid{background:var(--green-light);color:var(--green);border-color:var(--green-mid)}
+.status-select.workable{background:var(--red-light);color:var(--red);border-color:#F5A0A0}
+.del-row-btn{background:none;border:none;color:var(--text-3);cursor:pointer;font-size:15px;padding:2px 5px;border-radius:4px;transition:all 0.1s;line-height:1}
+.del-row-btn:hover{color:var(--red);background:var(--red-light)}
+.claim-num-badge{font-family:'Courier New',monospace;font-size:12px;font-weight:700;color:var(--blue-dark);background:var(--blue-light);padding:3px 8px;border-radius:6px;border:1px solid var(--blue-mid);white-space:nowrap;display:inline-block}
+.pdf-pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.pdf-pill.attached{background:var(--green-light);color:var(--green);border:1px solid var(--green-mid)}
+.pdf-pill.missing{background:var(--amber-light);color:var(--amber);border:1px solid var(--amber-mid)}
+
+/* ── HELIX BAR ── */
+.helix-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;background:var(--green-light);border:1px solid var(--green-mid);border-radius:var(--radius);margin-bottom:1.1rem;flex-wrap:wrap}
+.helix-bar-left{display:flex;align-items:center;gap:10px}
+.helix-bar-icon{font-size:16px}
+.helix-bar-text{font-size:13px;font-weight:600;color:var(--green)}
+.helix-bar-sub{font-size:11px;color:var(--text-2);margin-top:1px}
+.helix-bar-right{display:flex;align-items:center;gap:8px}
+.btn-select-all{font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--radius);border:1px solid var(--green-mid);background:white;color:var(--green);cursor:pointer;font-family:inherit;transition:all 0.12s;white-space:nowrap}
+.btn-select-all:hover{background:var(--green);color:white}
+.btn-remove-selected{font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--radius);border:none;background:var(--green);color:white;cursor:pointer;font-family:inherit;transition:all 0.12s;white-space:nowrap}
+.btn-remove-selected:hover:not(:disabled){opacity:0.85}
+.btn-remove-selected:disabled{opacity:0.35;cursor:not-allowed}
+
+/* ── CYCLE PANEL ── */
+.cycle-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.1rem 1.4rem;margin-bottom:1.1rem;box-shadow:var(--shadow-sm)}
+.cycle-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.cycle-title{display:flex;align-items:center;gap:10px}
+.cycle-icon{width:30px;height:30px;border-radius:7px;background:var(--blue-light);border:1px solid var(--blue-mid);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.cycle-label{font-size:14px;font-weight:600;color:var(--blue-dark)}
+.cycle-sub{font-size:11px;color:var(--text-3);margin-top:1px}
+.cycle-fields{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.cycle-fg{display:flex;flex-direction:column;gap:4px}
+.cycle-fg label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-3)}
+.cycle-fg input[type=date]{font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:inherit}
+.cycle-fg input[type=date]:focus{outline:none;border-color:var(--blue)}
+.cycle-toggle{display:flex;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.cycle-toggle button{font-size:12px;font-weight:600;padding:7px 13px;border:none;background:transparent;color:var(--text-2);cursor:pointer;font-family:inherit;transition:all 0.12s;white-space:nowrap}
+.cycle-toggle button.active{background:var(--blue-dark);color:white}
+.cycle-preview{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.cycle-preview-text{font-size:12px;color:var(--text-2)}
+.cycle-preview-text strong{color:var(--blue-dark)}
+.cycle-preview-text.none{color:var(--text-3);font-style:italic}
+.btn-export-filtered{padding:8px 18px;font-size:13px;font-weight:600;border-radius:var(--radius);border:none;background:var(--blue-dark);color:white;cursor:pointer;font-family:inherit;white-space:nowrap}
+.btn-export-filtered:hover:not(:disabled){background:var(--blue)}
+.btn-export-filtered:disabled{opacity:0.35;cursor:not-allowed}
+
+/* ── NOTES VIEW (ASHLEIGH) ── */
+.notes-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:10px}
+.notes-title{font-size:20px;font-weight:700;color:var(--blue-dark)}
+.notes-sub{font-size:13px;color:var(--text-3);margin-top:3px}
+.notes-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:1.25rem}
+.notes-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
+table.notes{width:100%;border-collapse:collapse;font-size:13px}
+table.notes thead th{font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-3);padding:12px 14px;background:var(--bg);border-bottom:1px solid var(--border);white-space:nowrap;text-align:left}
+table.notes tbody td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle;font-size:13px}
+table.notes tbody tr:last-child td{border-bottom:none}
+table.notes tbody tr:hover td{background:#F7FBFF}
+table.notes tbody tr.missing-row td{background:var(--amber-light)}
+table.notes tbody tr.missing-row:hover td{background:#FFF0CC}
+
+/* ── SHORTCUTS ── */
+.shortcuts-view{max-width:760px}
+.shortcuts-header{margin-bottom:1.5rem}
+.shortcuts-title{font-size:20px;font-weight:700;color:var(--blue-dark)}
+.shortcuts-sub{font-size:13px;color:var(--text-3);margin-top:4px}
+.shortcuts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.shortcut-group{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem 1.5rem;box-shadow:var(--shadow-sm)}
+.shortcut-group-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-3);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.shortcut-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--bg)}
+.shortcut-row:last-child{border-bottom:none}
+.shortcut-desc{font-size:13px;color:var(--text-2)}
+.shortcut-keys{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.key{display:inline-flex;align-items:center;justify-content:center;background:var(--bg);border:1px solid var(--border-mid);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;color:var(--text);font-family:'Courier New',monospace;box-shadow:0 1px 2px rgba(0,0,0,0.08);min-width:28px;white-space:nowrap}
+.key-sep{font-size:10px;color:var(--text-3)}
+.shortcuts-note{margin-top:14px;padding:10px 14px;background:var(--blue-light);border-radius:var(--radius);font-size:12px;color:var(--blue-dark);border:1px solid var(--blue-mid)}
+
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:3.5rem 1rem;color:var(--text-3);font-size:13px}
+.empty-icon{font-size:34px;margin-bottom:10px;opacity:0.35}
+.empty-title{font-size:15px;font-weight:600;color:var(--text-2);margin-bottom:4px}
+
+/* ── FAB ── */
+.fab-wrap{position:fixed;bottom:1.75rem;left:50%;transform:translateX(-50%);z-index:200;pointer-events:none}
+.fab{display:flex;align-items:center;gap:10px;padding:13px 24px;background:var(--blue-dark);color:white;border:none;border-radius:50px;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;box-shadow:0 4px 20px rgba(58,126,173,0.45);pointer-events:all;transition:background 0.15s,transform 0.15s,box-shadow 0.15s;white-space:nowrap}
+.fab:hover{background:var(--blue);transform:translateY(-2px);box-shadow:0 6px 24px rgba(58,126,173,0.5)}
+.fab:active{transform:translateY(0)}
+.fab-plus{font-size:20px;font-weight:400;line-height:1}
+.fab-count{font-size:11px;font-weight:700;background:rgba(255,255,255,0.2);padding:2px 7px;border-radius:20px;min-width:22px;text-align:center}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--blue-dark);color:white;padding:11px 20px;border-radius:var(--radius);font-size:13px;font-weight:500;box-shadow:var(--shadow);transform:translateY(10px);opacity:0;transition:all 0.25s;pointer-events:none;z-index:9999}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.green{background:var(--green)}
+.toast.red{background:var(--red)}
+.toast.amber{background:var(--amber)}
+
+@media(max-width:700px){
+  .main{padding:1rem}
+  .prov-grid,.cols-3{grid-template-columns:1fr 1fr}
+  .summary-bar,.notes-summary{grid-template-columns:1fr 1fr}
+  .shortcuts-grid{grid-template-columns:1fr}
+  .header,.nav{padding:0 1rem}
+}
+</style>
+</head>
+<body>
+
+<!-- ROLE SELECTOR -->
+<div class="role-screen" id="role-screen">
+  <div class="role-box">
+    <div class="role-logo">PPC</div>
+    <div class="role-title">Pathways Portal</div>
+    <div class="role-sub">Ortho Plus Management — Who are you?</div>
+    <div class="role-btns">
+      <button class="role-btn" onclick="selectRole('pathways')">
+        <div class="role-btn-icon">🏥</div>
+        <div class="role-btn-label">Pathways Staff</div>
+        <div class="role-btn-sub">Submit claims &amp; notes</div>
+      </button>
+      <button class="role-btn" onclick="selectRole('opm')">
+        <div class="role-btn-icon">📊</div>
+        <div class="role-btn-label">OPM Biller</div>
+        <div class="role-btn-sub">Ashleigh / OPM team</div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- PIN SCREEN -->
+<div class="pin-screen hidden" id="pin-screen">
+  <div class="pin-box">
+    <div class="pin-title">OPM Biller Access</div>
+    <div class="pin-sub">Enter your 4-digit PIN to continue</div>
+    <div class="pin-dots">
+      <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+    </div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="pinPress('1')">1</button>
+      <button class="pin-key" onclick="pinPress('2')">2</button>
+      <button class="pin-key" onclick="pinPress('3')">3</button>
+      <button class="pin-key" onclick="pinPress('4')">4</button>
+      <button class="pin-key" onclick="pinPress('5')">5</button>
+      <button class="pin-key" onclick="pinPress('6')">6</button>
+      <button class="pin-key" onclick="pinPress('7')">7</button>
+      <button class="pin-key" onclick="pinPress('8')">8</button>
+      <button class="pin-key" onclick="pinPress('9')">9</button>
+      <button class="pin-key" onclick="pinPress('0')">0</button>
+      <button class="pin-key del" onclick="pinDel()">⌫</button>
+      <button class="pin-key" style="opacity:0" disabled></button>
+    </div>
+    <div class="pin-error-msg" id="pin-error"></div>
+    <button class="pin-back" onclick="backToRoleSelect()">← Back</button>
+  </div>
+</div>
+
+<!-- SIGN IN OVERLAY -->
+<div class="signin-overlay hidden" id="signin-overlay">
+  <div class="signin-box">
+    <div class="signin-logo">☁️</div>
+    <div class="signin-title">Sign in to continue</div>
+    <div class="signin-sub">Sign in with your Ortho Plus Microsoft account to sync claims across all devices. This happens once — you won't be asked again.</div>
+    <button class="btn-signin" onclick="msalSignIn()">
+      <svg width="20" height="20" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="9" height="9" fill="#F25022"/><rect x="11" y="1" width="9" height="9" fill="#7FBA00"/><rect x="1" y="11" width="9" height="9" fill="#00A4EF"/><rect x="11" y="11" width="9" height="9" fill="#FFB900"/></svg>
+      Sign in with Microsoft
+    </button>
+    <div class="signin-note">Your data is stored securely in the shared PATHWAYS Beta folder</div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-left">
+    <div class="header-logo">PPC</div>
+    <div class="header-brand">
+      <span class="header-org">Ortho Plus Management</span>
+      <span class="header-title">Pathways Portal</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="role-pill" id="role-pill" onclick="switchRole()">Switch Role</button>
+    <div class="save-indicator">
+      <div class="save-dot" id="save-dot"></div>
+      <span id="save-label">Saved</span>
+    </div>
+  </div>
+</header>
+
+<!-- SYNC STATUS BAR -->
+<div class="sync-bar signing-in" id="sync-bar" style="display:none">
+  <div class="sync-spinner" id="sync-spinner"></div>
+  <span id="sync-msg">Connecting to OneDrive...</span>
+</div>
+
+<nav class="nav" id="main-nav"></nav>
+
+<main class="main" id="main-content">
+
+  <!-- PATHWAYS: SUBMIT CLAIMS -->
+  <div class="view" id="view-submit">
+    <div class="provider-card">
+      <div class="section-label">Submission Info</div>
+      <div class="prov-grid">
+        <div class="fg">
+          <label>Submitted By <span class="req">*</span></label>
+          <input type="text" id="prov-contact" placeholder="Your name" oninput="autosave()"/>
+        </div>
+        <div class="fg">
+          <label>Submission Date <span class="req">*</span></label>
+          <input type="date" id="prov-date" oninput="autosave()"/>
+        </div>
+        <div class="fg">
+          <label>Clinic / Practice</label>
+          <input type="text" id="prov-name" value="Pathways Professional Counseling" oninput="autosave()"/>
+        </div>
+      </div>
+    </div>
+    <div id="all-submitted-banner" class="all-submitted" style="display:none">
+      <div class="all-submitted-icon">✅</div>
+      <div class="all-submitted-title">All patients submitted!</div>
+      <div class="all-submitted-sub">Don't forget to upload the clinical notes in the Notes tab.</div>
+    </div>
+    <div id="cards-container"></div>
+    <div style="height:88px"></div>
+  </div>
+
+  <!-- PATHWAYS: UPLOAD NOTES -->
+  <div class="view" id="view-notes-upload">
+    <div class="notes-upload-wrap">
+      <div class="nu-intro">
+        <div class="nu-intro-icon">📋</div>
+        <div class="nu-intro-title">Upload Clinical Notes</div>
+        <div class="nu-intro-sub">Select the claim this note belongs to, attach the PDF,<br>and submit. The file downloads — move it to the shared folder.</div>
+      </div>
+      <div id="nu-no-claims" class="nu-no-claims" style="display:none">
+        <div class="nu-no-claims-icon">📭</div>
+        <div class="nu-no-claims-title">No submitted claims yet</div>
+        <div class="nu-no-claims-sub">Submit claims in the Claims tab first — they'll appear here.</div>
+      </div>
+      <div id="nu-form-wrap">
+        <div class="nu-card" id="nu-card">
+          <div class="nu-section-label">Step 1 — Select Claim</div>
+          <div class="nu-fg">
+            <label>Claim <span style="color:var(--red)">*</span></label>
+            <select id="nu-claim-select" onchange="nuOnClaimSelect()">
+              <option value="">— Select a submitted claim —</option>
+            </select>
+          </div>
+          <div class="claim-preview-box" id="nu-preview">
+            <div class="cpb-row"><span class="cpb-label">Claim #</span><span class="cpb-claimnum" id="nu-cp-num">—</span></div>
+            <div class="cpb-row"><span class="cpb-label">Patient</span><span class="cpb-val" id="nu-cp-patient">—</span></div>
+            <div class="cpb-row"><span class="cpb-label">Provider</span><span class="cpb-val" id="nu-cp-provider">—</span></div>
+            <div class="cpb-row"><span class="cpb-label">DOS</span><span class="cpb-val" id="nu-cp-dos">—</span></div>
+            <div class="already-warn" id="nu-already-warn" style="display:none">⚠️ A notes PDF already exists for this claim — uploading will replace it.</div>
+          </div>
+          <div class="nu-section-label">Step 2 — Attach PDF</div>
+          <div class="nu-drop" id="nu-drop" ondragover="nuDragOver(event)" ondragleave="nuDragLeave(event)" ondrop="nuDrop(event)">
+            <input type="file" accept="application/pdf" onchange="nuFileSelect(event)" id="nu-file-input"/>
+            <div class="nu-drop-icon" id="nu-dz-icon">📄</div>
+            <div class="nu-drop-title" id="nu-dz-title">Click to upload or drag &amp; drop</div>
+            <div class="nu-drop-sub" id="nu-dz-sub">PDF only · Max 10MB</div>
+            <div class="nu-drop-filename" id="nu-dz-filename"></div>
+            <div class="nu-drop-size" id="nu-dz-size"></div>
+          </div>
+          <div class="filename-preview-box" id="nu-filename-preview">
+            <div class="fpb-label">File will be saved as</div>
+            <div class="fpb-name" id="nu-fpb-name">—</div>
+            <div class="fpb-hint">Move this file to the shared folder after downloading.</div>
+          </div>
+          <button class="btn-submit-note" id="nu-btn-submit" disabled onclick="nuSubmit()">Download &amp; Submit Note</button>
+        </div>
+        <div class="nu-success" id="nu-success">
+          <div class="nu-success-icon">✅</div>
+          <div class="nu-success-title">Note submitted!</div>
+          <div class="nu-success-sub">PDF downloaded with the correct filename.<br>Move it to the shared folder for Ashleigh.</div>
+          <div class="nu-success-filename" id="nu-success-filename">—</div>
+          <div class="nu-success-btns">
+            <button class="btn-redownload" onclick="nuRedownload()">Re-download PDF</button>
+            <button class="btn-another" onclick="nuReset()">Upload Another Note</button>
+          </div>
+        </div>
+      </div>
+      <div class="session-uploads" id="nu-session-uploads" style="display:none">
+        <div class="su-title">Uploaded This Session <span class="su-count" id="nu-session-count">0</span></div>
+        <div class="su-list" id="nu-session-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OPM: BILLER LOG -->
+  <div class="view" id="view-log">
+    <div class="log-header">
+      <div>
+        <div class="log-title">Biller Claim Log</div>
+        <div class="log-sub" id="log-sub">No claims yet</div>
+      </div>
+      <div class="log-actions">
+        <button class="btn-secondary" onclick="confirmClearLog()">Clear Log</button>
+        <button class="btn-primary" onclick="exportCSV(null)" id="btn-export-all">Export All CSV</button>
+      </div>
+    </div>
+    <div class="status-filter-bar" id="status-filter-bar" style="display:none">
+      <span class="sf-label">Filter:</span>
+      <button class="sf-pill active" data-filter="all" onclick="setStatusFilter('all')">All <span class="sf-count" id="sf-count-all">0</span></button>
+      <button class="sf-pill needs-export" data-filter="needs-export" onclick="setStatusFilter('needs-export')">Needs Export <span class="sf-count" id="sf-count-needs-export">0</span></button>
+      <button class="sf-pill export-finalized" data-filter="export-finalized" onclick="setStatusFilter('export-finalized')">Export Finalized <span class="sf-count" id="sf-count-export-finalized">0</span></button>
+      <button class="sf-pill submitted" data-filter="submitted" onclick="setStatusFilter('submitted')">Submitted MD <span class="sf-count" id="sf-count-submitted">0</span></button>
+      <button class="sf-pill paid" data-filter="paid" onclick="setStatusFilter('paid')">Paid <span class="sf-count" id="sf-count-paid">0</span></button>
+      <button class="sf-pill workable" data-filter="workable" onclick="setStatusFilter('workable')">Workable <span class="sf-count" id="sf-count-workable">0</span></button>
+    </div>
+    <div class="cycle-panel" id="cycle-panel" style="display:none">
+      <div class="cycle-top">
+        <div class="cycle-title">
+          <div class="cycle-icon">📅</div>
+          <div><div class="cycle-label">Funding Cycle Export</div><div class="cycle-sub">Filter by date range before exporting to MoveDocs</div></div>
+        </div>
+        <div class="cycle-fields">
+          <div class="cycle-fg">
+            <label>Filter By</label>
+            <div class="cycle-toggle">
+              <button id="toggle-received" class="active" onclick="setFilterMode('received')">Date Received</button>
+              <button id="toggle-dos" onclick="setFilterMode('dos')">Date of Service</button>
+            </div>
+          </div>
+          <div class="cycle-fg"><label>From</label><input type="date" id="cycle-from" oninput="updateCyclePreview()"/></div>
+          <div class="cycle-fg"><label>To (Cutoff)</label><input type="date" id="cycle-to" oninput="updateCyclePreview()"/></div>
+        </div>
+      </div>
+      <div class="cycle-preview">
+        <span class="cycle-preview-text none" id="cycle-preview-text">Set a date range above to preview</span>
+        <button class="btn-export-filtered" id="btn-export-filtered" onclick="exportFilteredCSV()" disabled>Export Filtered CSV</button>
+      </div>
+    </div>
+    <div class="helix-bar" id="helix-bar" style="display:none">
+      <div class="helix-bar-left">
+        <span class="helix-bar-icon">✅</span>
+        <div><div class="helix-bar-text">Mark as Submitted to Helix</div><div class="helix-bar-sub">Check patients entered into Helix, then remove them from the log</div></div>
+      </div>
+      <div class="helix-bar-right">
+        <button class="btn-select-all" onclick="toggleSelectAll()">Select All</button>
+        <button class="btn-remove-selected" id="btn-remove-selected" onclick="removeSelected()" disabled>Remove Selected</button>
+      </div>
+    </div>
+    <div class="summary-bar">
+      <div class="summary-card"><div class="summary-label">Patients</div><div class="summary-value" id="sum-patients">0</div></div>
+      <div class="summary-card"><div class="summary-label">Total Billed</div><div class="summary-value blue" id="sum-billed">$0.00</div></div>
+      <div class="summary-card"><div class="summary-label">Needs Export</div><div class="summary-value amber" id="sum-needs-export">0</div></div>
+    </div>
+    <div class="log-table-wrap">
+      <table class="log">
+        <colgroup><col/><col/><col/><col/><col/><col/><col/><col/><col/><col/><col/><col/><col/><col/></colgroup>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="chk-all" onclick="toggleSelectAll(this)" style="accent-color:var(--green);cursor:pointer;width:15px;height:15px"/></th>
+            <th>Claim #</th><th>Patient</th><th>DOB</th><th>DOS</th><th>Provider</th>
+            <th>CPT</th><th>Description</th><th style="text-align:center">Units</th>
+            <th style="text-align:right">Rate</th><th style="text-align:right">Total</th>
+            <th>Notes PDF</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="log-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- OPM: NOTES VIEW -->
+  <div class="view" id="view-notes-opm">
+    <div class="notes-header">
+      <div>
+        <div class="notes-title">Clinical Notes</div>
+        <div class="notes-sub" id="notes-opm-sub">All claims and their notes status</div>
+      </div>
+    </div>
+    <div class="notes-summary">
+      <div class="summary-card"><div class="summary-label">Total Claims</div><div class="summary-value" id="notes-sum-total">0</div></div>
+      <div class="summary-card"><div class="summary-label">Notes Attached</div><div class="summary-value" style="color:var(--green)" id="notes-sum-attached">0</div></div>
+      <div class="summary-card"><div class="summary-label">Notes Missing</div><div class="summary-value amber" id="notes-sum-missing">0</div></div>
+    </div>
+    <div class="notes-table-wrap">
+      <table class="notes">
+        <thead>
+          <tr>
+            <th>Claim #</th><th>Patient</th><th>DOS</th><th>Provider</th><th>Submitted</th><th>Status</th><th>Notes PDF</th>
+          </tr>
+        </thead>
+        <tbody id="notes-opm-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SHORTCUTS -->
+  <div class="view" id="view-shortcuts">
+    <div class="shortcuts-view">
+      <div class="shortcuts-header">
+        <div class="shortcuts-title">Keyboard Shortcuts</div>
+        <div class="shortcuts-sub">Speed up your workflow with these hotkeys</div>
+      </div>
+      <div class="shortcuts-grid" id="shortcuts-grid"></div>
+      <div class="shortcuts-note" id="shortcuts-note"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- FAB -->
+<div class="fab-wrap" id="fab-wrap" style="display:none">
+  <button class="fab" onclick="addCard()">
+    <span class="fab-plus">+</span>
+    <span class="fab-label">Add Patient</span>
+    <span class="fab-count" id="fab-count"></span>
+  </button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Constants ────────────────────────────────────────────────
+const FEES={
+  "90791":{desc:"Diagnostic Interview",rate:870.92},
+  "90832":{desc:"Psychotherapy 30 min",rate:448.92},
+  "90837":{desc:"Psychotherapy 60 min",rate:882.84},
+  "90847":{desc:"Family Psychotherapy 50 min",rate:882.84},
+  "96130":{desc:"Psych Testing Eval 0-60 min",rate:592.65},
+  "96131":{desc:"Psych Testing Eval 61-120 min",rate:592.65},
+  "99204":{desc:"Complex New Office Visit",rate:1002.56},
+  "99214":{desc:"Complex Office Visit",rate:728.70},
+  "PPC-LC":{desc:"Late Cancellation",rate:100.00},
+  "PPC-NS":{desc:"No Call / No Show",rate:100.00},
+};
+const PROVIDERS=["Michael Smith, M.Ed., LPC","Serena Jensen","Zachory Randall, MA, LPC, LADC","Brennan Roark, MS, LMFT-Candidate","David Lee, M.Ed, LPC Candidate"];
+const PROVIDER_OPTS=PROVIDERS.map(p=>`<option value="${p}">${p}</option>`).join('');
+const CPT_OPTS=Object.entries(FEES).map(([k,v])=>`<option value="${k}">${k} — ${v.desc}</option>`).join('');
+const MAX_LINES=10;
+const PIN='2016';
+const LS='opm_ppc7_';
+
+// ── State ────────────────────────────────────────────────────
+let cardCount=0,log=[],saveTimer=null,currentRole=null,pinEntry='',statusFilter='all',filterMode='received';
+let nuCurrentPDF=null,nuLastDownload=null,nuSessionUploads=[];
+
+// ── Helpers ──────────────────────────────────────────────────
+const fmt=n=>'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtDate=d=>{if(!d)return'—';const[y,m,day]=d.split('-');return`${m}/${day}/${y}`};
+const fmtTime=ts=>{const d=new Date(ts);return d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})};
+const today=()=>new Date().toISOString().split('T')[0];
+const val=id=>{const el=document.getElementById(id);return el?el.value:''};
+const sanitizeClaim=raw=>raw.toString().trim().replace(/[^a-zA-Z0-9]/g,'').toUpperCase();
+const fmtClaimNum=raw=>raw?sanitizeClaim(raw)+'PPC':'';
+const buildPDFFilename=(claimNum,patient,dos)=>{
+  const np=patient.replace(/[^a-zA-Z0-9,\s]/g,'').replace(/,\s*/g,'_').replace(/\s+/g,'_');
+  return[claimNum,np,dos?`DOS-${dos}`:''].filter(Boolean).join('_')+'.pdf';
+};
+const fmtSize=b=>b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB';
+
+function showToast(msg,type){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast show'+(type?' '+type:'');
+  clearTimeout(t._timer);t._timer=setTimeout(()=>t.className='toast',2800);
+}
+
+// ── Role / PIN ───────────────────────────────────────────────
+function selectRole(role){
+  if(role==='opm'){document.getElementById('role-screen').classList.add('hidden');document.getElementById('pin-screen').classList.remove('hidden');return;}
+  applyRole('pathways');
+}
+function applyRole(role){
+  currentRole=role;
+  localStorage.setItem(LS+'role',role);
+  document.getElementById('role-screen').classList.add('hidden');
+  document.getElementById('pin-screen').classList.add('hidden');
+  document.getElementById('role-pill').textContent=role==='pathways'?'🏥 Pathways Staff':'📊 OPM Biller';
+  document.getElementById('fab-wrap').style.display=role==='pathways'?'block':'none';
+  buildNav(role);
+  switchView(role==='pathways'?'submit':'log');
+  // If MSAL already authenticated, load from OneDrive
+  // Otherwise show sign-in overlay
+  if(msalAccount){
+    syncEnabled=true;
+    loadState();
+  } else {
+    // Try silent sign-in first
+    msalInstance?.initialize().then(()=>{
+      const accounts=msalInstance.getAllAccounts();
+      if(accounts.length>0){
+        msalAccount=accounts[0];
+        syncEnabled=true;
+        loadState();
+      } else {
+        // Show sign-in overlay
+        document.getElementById('signin-overlay').classList.remove('hidden');
+        // Load from localStorage as fallback while waiting
+        loadFromLocalStorage();
+      }
+    }).catch(()=>{
+      document.getElementById('signin-overlay').classList.remove('hidden');
+      loadFromLocalStorage();
+    });
+  }
+}
+function switchRole(){currentRole=null;localStorage.removeItem(LS+'role');pinEntry='';updatePinDots();document.getElementById('role-screen').classList.remove('hidden');}
+function backToRoleSelect(){document.getElementById('pin-screen').classList.add('hidden');document.getElementById('role-screen').classList.remove('hidden');pinEntry='';updatePinDots();document.getElementById('pin-error').textContent='';}
+function pinPress(d){
+  if(pinEntry.length>=4)return;pinEntry+=d;updatePinDots();
+  if(pinEntry.length===4){setTimeout(()=>{
+    if(pinEntry===PIN){applyRole('opm');pinEntry='';updatePinDots();}
+    else{document.querySelectorAll('.pin-dot').forEach(x=>x.classList.add('error'));document.getElementById('pin-error').textContent='Incorrect PIN. Try again.';setTimeout(()=>{pinEntry='';updatePinDots();document.querySelectorAll('.pin-dot').forEach(x=>x.classList.remove('error'));},600);}
+  },100);}
+}
+function pinDel(){pinEntry=pinEntry.slice(0,-1);updatePinDots();document.getElementById('pin-error').textContent='';}
+function updatePinDots(){for(let i=0;i<4;i++){const d=document.getElementById(`pd${i}`);if(d)d.classList.toggle('filled',i<pinEntry.length);}}
+document.addEventListener('keydown',e=>{
+  if(!document.getElementById('pin-screen').classList.contains('hidden')){
+    if(e.key>='0'&&e.key<='9')pinPress(e.key);
+    if(e.key==='Backspace')pinDel();
+  }
+});
+
+// ── Nav ──────────────────────────────────────────────────────
+function buildNav(role){
+  const nav=document.getElementById('main-nav');
+  if(role==='pathways'){
+    nav.innerHTML=`
+      <button class="nav-tab" id="tab-submit" onclick="switchView('submit')">Submit Claims</button>
+      <button class="nav-tab" id="tab-notes-upload" onclick="switchView('notes-upload')">📄 Upload Notes <span class="nav-badge" id="notes-missing-badge"></span></button>
+      <button class="nav-tab" id="tab-shortcuts" onclick="switchView('shortcuts')">⌨ Shortcuts</button>`;
+  }else{
+    nav.innerHTML=`
+      <button class="nav-tab" id="tab-log" onclick="switchView('log')">Biller Log <span class="nav-badge" id="log-badge">0</span></button>
+      <button class="nav-tab" id="tab-notes-opm" onclick="switchView('notes-opm')">📋 Notes <span class="nav-badge amber" id="notes-missing-opm-badge"></span></button>
+      <button class="nav-tab" id="tab-shortcuts" onclick="switchView('shortcuts')">⌨ Shortcuts</button>`;
+  }
+  buildShortcutsView(role);
+}
+
+function switchView(v){
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(el=>el.classList.remove('active'));
+  const view=document.getElementById(`view-${v}`);
+  const tab=document.getElementById(`tab-${v}`);
+  if(view)view.classList.add('active');
+  if(tab)tab.classList.add('active');
+  const fab=document.getElementById('fab-wrap');
+  if(fab)fab.style.display=(currentRole==='pathways'&&v==='submit')?'block':'none';
+  if(v==='log')renderLog();
+  if(v==='notes-opm')renderNotesOPM();
+  if(v==='notes-upload')nuRefreshClaims();
+  if(v==='shortcuts')buildShortcutsView(currentRole);
+  checkAllSubmittedBanner();
+}
+
+// ── OneDrive / MSAL Config ───────────────────────────────────
+const MSAL_CONFIG = {
+  auth: {
+    clientId: '2d743f1f-aa6d-478f-9bfc-985829914e48',
+    authority: 'https://login.microsoftonline.com/066313fa-9d02-4763-8f69-64e1f5d36fe7',
+    redirectUri: 'http://localhost',
+  },
+  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
+};
+const GRAPH_SCOPES = ['Files.ReadWrite.All', 'User.Read'];
+const DATA_FILE = 'claims_data.json';
+const FOLDER_PATH = 'Corporate/PATHWAYS Beta';
+
+// Build the correct Graph API URL for the file
+function getFileURL() {
+  return `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent('Corporate/PATHWAYS Beta')}/${DATA_FILE}:/content`;
+}
+
+let msalInstance = null;
+let msalAccount = null;
+let syncTimer = null;
+let lastSyncedData = null;
+let syncEnabled = false;
+
+// Init MSAL
+async function initMSAL() {
+  try {
+    msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+    await msalInstance.initialize();
+    // Try silent sign-in first
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts.length > 0) {
+      msalAccount = accounts[0];
+      await syncEnabled_set(true);
+      await loadFromOneDrive();
+    } else {
+      // Show sign-in overlay after role is selected
+      showSyncBar('signing-in', 'Sign in to sync with OneDrive');
+    }
+  } catch(e) {
+    console.warn('MSAL init failed, using localStorage fallback:', e);
+    syncEnabled = false;
+  }
+}
+
+async function msalSignIn() {
+  try {
+    showSyncBar('syncing', 'Signing in...');
+    document.getElementById('signin-overlay').classList.add('hidden');
+    const result = await msalInstance.loginPopup({ scopes: GRAPH_SCOPES });
+    msalAccount = result.account;
+    await syncEnabled_set(true);
+    await loadFromOneDrive();
+  } catch(e) {
+    console.warn('Sign in failed:', e);
+    showSyncBar('error', 'Sign in failed — using local storage');
+    syncEnabled = false;
+  }
+}
+
+async function syncEnabled_set(val) {
+  syncEnabled = val;
+}
+
+async function getToken() {
+  if (!msalInstance || !msalAccount) return null;
+  try {
+    const result = await msalInstance.acquireTokenSilent({
+      scopes: GRAPH_SCOPES,
+      account: msalAccount
+    });
+    return result.accessToken;
+  } catch(e) {
+    // Silent failed — try popup
+    try {
+      const result = await msalInstance.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+      msalAccount = result.account;
+      return result.accessToken;
+    } catch(e2) {
+      return null;
+    }
+  }
+}
+
+// ── OneDrive Read/Write ──────────────────────────────────────
+async function loadFromOneDrive() {
+  if (!syncEnabled) return;
+  showSyncBar('syncing', 'Loading from OneDrive...');
+  try {
+    const token = await getToken();
+    if (!token) { showSyncBar('error', 'Could not get access token — check sign-in'); return; }
+
+    const url = getFileURL();
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+
+    if (res.status === 404) {
+      // File doesn't exist yet — fresh start
+      showSyncBar('synced', `Ready · ${msalAccount?.username || 'user'} · No data yet`);
+      if (currentRole === 'pathways') { const c=document.getElementById('cards-container');if(c&&c.children.length===0)addCard(false); }
+      startPolling();
+      return;
+    }
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('OneDrive load error:', res.status, errText);
+      throw new Error(`HTTP ${res.status}: ${errText}`);
+    }
+
+    const data = await res.json();
+    lastSyncedData = JSON.stringify(data);
+
+    if (data.prov) {
+      const n=document.getElementById('prov-name'),c=document.getElementById('prov-contact'),d=document.getElementById('prov-date');
+      if(n&&data.prov.name)n.value=data.prov.name;
+      if(c&&data.prov.contact)c.value=data.prov.contact;
+      if(d&&data.prov.date)d.value=data.prov.date;
+    }
+    if (data.log) log = data.log;
+    if (data.cardCount) cardCount = data.cardCount;
+
+    const container = document.getElementById('cards-container');
+    if (container) container.innerHTML = '';
+    if (data.cards && data.cards.length > 0) {
+      isRestoring = true;
+      data.cards.forEach(c => restoreCard(c));
+      isRestoring = false;
+    } else if (currentRole === 'pathways') {
+      addCard(false);
+    }
+
+    updateBadge(); updateNotesBadges();
+    showSyncBar('synced', `Synced · ${msalAccount?.username || 'user'}`);
+    startPolling();
+
+  } catch(e) {
+    console.warn('OneDrive load failed:', e);
+    showSyncBar('error', `OneDrive error: ${e.message} — using local save`);
+    loadFromLocalStorage();
+  }
+}
+
+async function saveToOneDrive() {
+  if (!syncEnabled) { saveToLocalStorage(); return; }
+
+  const prov = {name:val('prov-name'),contact:val('prov-contact'),date:val('prov-date')};
+  const cards = [];
+  document.querySelectorAll('#cards-container > [data-card-id]').forEach(el=>{
+    const id=el.dataset.cardId;
+    const lines=[];
+    el.querySelectorAll('[data-line-id]').forEach(row=>{
+      const lid=row.dataset.lineId;
+      const cpt=val(`lcpt-${id}-${lid}`);
+      if(cpt)lines.push({lid,cpt,units:val(`lunits-${id}-${lid}`)});
+    });
+    const name=val(`pt-name-${id}`);
+    const submitted=el.classList.contains('submitted');
+    if(!name&&lines.length===0&&!submitted)return;
+    cards.push({id,submitted,name,dob:val(`pt-dob-${id}`),dos:val(`pt-dos-${id}`),
+      provider:val(`pt-prov-${id}`),claimnum:val(`pt-claim-${id}`),
+      notes:val(`pt-notes-${id}`),lines,lineCount:parseInt(el.dataset.lineCount||'0')});
+  });
+
+  const data = { prov, cards, log, cardCount, updatedAt: Date.now(),
+    updatedBy: msalAccount?.username || 'unknown' };
+  const dataStr = JSON.stringify(data, null, 2);
+
+  // Don't save if nothing changed
+  if (dataStr === lastSyncedData) return;
+
+  showSyncBar('syncing', 'Saving to OneDrive...');
+  try {
+    const token = await getToken();
+    if (!token) { saveToLocalStorage(); showSyncBar('error','Could not get token — saved locally'); return; }
+
+    const url = getFileURL();
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: dataStr
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('OneDrive save error:', res.status, errText);
+      throw new Error(`HTTP ${res.status}`);
+    }
+    lastSyncedData = dataStr;
+    showSyncBar('synced', `Saved · ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`);
+    saveToLocalStorage();
+
+  } catch(e) {
+    console.warn('OneDrive save failed:', e);
+    showSyncBar('error', 'OneDrive save failed — saved locally');
+    saveToLocalStorage();
+  }
+}
+
+// Poll for changes from other users
+let pollTimer = null;
+function startPolling() {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    if (!syncEnabled || !msalAccount) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(getFileURL(), { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return;
+      const data = await res.json();
+      const dataStr = JSON.stringify(data);
+      // Only reload if data changed and wasn't saved by us
+      if (dataStr !== lastSyncedData && data.updatedBy !== msalAccount?.username) {
+        lastSyncedData = dataStr;
+        if (data.log) {
+          log = data.log;
+          updateBadge(); updateNotesBadges();
+          if (document.getElementById('view-log').classList.contains('active')) renderLog();
+          if (document.getElementById('view-notes-opm').classList.contains('active')) renderNotesOPM();
+        }
+        showSyncBar('synced', `Updated by ${data.updatedBy || 'another user'}`);
+        setTimeout(() => showSyncBar('synced', `Synced · ${msalAccount?.username || 'user'}`), 3000);
+      }
+    } catch(e) {}
+  }, 30000); // poll every 30 seconds
+}
+
+function showSyncBar(type, msg) {
+  const bar = document.getElementById('sync-bar');
+  const spinner = document.getElementById('sync-spinner');
+  const msgEl = document.getElementById('sync-msg');
+  if (!bar) return;
+  bar.style.display = 'flex';
+  bar.className = `sync-bar ${type}`;
+  spinner.style.display = type === 'syncing' ? 'block' : 'none';
+  msgEl.textContent = msg;
+}
+
+// ── localStorage fallback ────────────────────────────────────
+function saveToLocalStorage() {
+  const prov={name:val('prov-name'),contact:val('prov-contact'),date:val('prov-date')};
+  const cards=[];
+  document.querySelectorAll('#cards-container > [data-card-id]').forEach(el=>{
+    const id=el.dataset.cardId;const lines=[];
+    el.querySelectorAll('[data-line-id]').forEach(row=>{
+      const lid=row.dataset.lineId;const cpt=val(`lcpt-${id}-${lid}`);
+      if(cpt)lines.push({lid,cpt,units:val(`lunits-${id}-${lid}`)});
+    });
+    const name=val(`pt-name-${id}`);const submitted=el.classList.contains('submitted');
+    if(!name&&lines.length===0&&!submitted)return;
+    cards.push({id,submitted,name,dob:val(`pt-dob-${id}`),dos:val(`pt-dos-${id}`),
+      provider:val(`pt-prov-${id}`),claimnum:val(`pt-claim-${id}`),
+      notes:val(`pt-notes-${id}`),lines,lineCount:parseInt(el.dataset.lineCount||'0')});
+  });
+  try {
+    localStorage.setItem(LS+'prov',JSON.stringify(prov));
+    localStorage.setItem(LS+'cards',JSON.stringify(cards));
+    localStorage.setItem(LS+'log',JSON.stringify(log));
+    localStorage.setItem(LS+'count',String(cardCount));
+  } catch(e) {}
+}
+
+function loadFromLocalStorage() {
+  try {
+    const prov=JSON.parse(localStorage.getItem(LS+'prov')||'null');
+    if(prov){const n=document.getElementById('prov-name'),c=document.getElementById('prov-contact'),d=document.getElementById('prov-date');if(n&&prov.name)n.value=prov.name;if(c&&prov.contact)c.value=prov.contact;if(d&&prov.date)d.value=prov.date;}
+    log=JSON.parse(localStorage.getItem(LS+'log')||'[]');
+    cardCount=parseInt(localStorage.getItem(LS+'count')||'0');
+    const cards=JSON.parse(localStorage.getItem(LS+'cards')||'[]');
+    const container=document.getElementById('cards-container');
+    if(container)container.innerHTML='';
+    if(cards.length>0){isRestoring=true;cards.forEach(c=>restoreCard(c));isRestoring=false;}
+    else if(currentRole==='pathways'){addCard(false);}
+    updateBadge();updateNotesBadges();
+  } catch(e) { if(currentRole==='pathways')addCard(false); }
+}
+let isRestoring = false;
+function autosave(){if(isRestoring)return;clearTimeout(saveTimer);saveTimer=setTimeout(saveState,1500);}
+function saveState(){
+  const dot=document.getElementById('save-dot'),lbl=document.getElementById('save-label');
+  if(dot)dot.classList.add('saving');if(lbl)lbl.textContent='Saving…';
+  if(syncEnabled){
+    saveToOneDrive().finally(()=>{if(dot)dot.classList.remove('saving');if(lbl)lbl.textContent='Saved';});
+  } else {
+    saveToLocalStorage();
+    setTimeout(()=>{if(dot)dot.classList.remove('saving');if(lbl)lbl.textContent='Saved';},500);
+  }
+}
+function loadState(){
+  isRestoring=true;
+  clearTimeout(saveTimer);
+  const container=document.getElementById('cards-container');
+  if(container)container.innerHTML='';
+  if(syncEnabled){
+    loadFromOneDrive().finally(()=>{isRestoring=false;});
+  } else {
+    loadFromLocalStorage();
+    isRestoring=false;
+  }
+}
+
+// ── Cards ────────────────────────────────────────────────────
+function addCard(open=true){
+  cardCount++;const id=cardCount;
+  const container=document.getElementById('cards-container');
+  const div=document.createElement('div');div.className='patient-card';div.dataset.cardId=id;div.dataset.lineCount='0';div.innerHTML=cardShell(id);
+  container.appendChild(div);addLine(id);
+  if(open){toggleBody(id,true);autosave();}
+  checkAllSubmittedBanner();return id;
+}
+function restoreCard(c){
+  const container=document.getElementById('cards-container');if(!container)return;
+  const div=document.createElement('div');div.className='patient-card';
+  if(c.submitted)div.classList.add('submitted');if(c.name)div.classList.add('has-data');
+  div.dataset.cardId=c.id;
+  // Start lineCount from saved value so new lines get fresh IDs
+  div.dataset.lineCount=String(c.lineCount||0);
+  div.innerHTML=cardShell(c.id);
+  container.appendChild(div);
+  if(c.name)document.getElementById(`pt-name-${c.id}`).value=c.name;
+  if(c.dob)document.getElementById(`pt-dob-${c.id}`).value=c.dob;
+  if(c.dos)document.getElementById(`pt-dos-${c.id}`).value=c.dos;
+  if(c.provider)document.getElementById(`pt-prov-${c.id}`).value=c.provider;
+  if(c.claimnum)document.getElementById(`pt-claim-${c.id}`).value=c.claimnum;
+  if(c.notes)document.getElementById(`pt-notes-${c.id}`).value=c.notes;
+  // Restore only saved lines (all have CPT since we filter on save)
+  const savedLines=c.lines||[];
+  savedLines.forEach(l=>{
+    const lid=parseInt(l.lid)||1;
+    const tbody=document.getElementById(`lines-body-${c.id}`);if(!tbody)return;
+    const tr=document.createElement('tr');tr.dataset.lineId=lid;
+    tr.innerHTML=`<td class="line-cpt"><select id="lcpt-${c.id}-${lid}" onchange="refreshLine(${c.id},${lid});refreshCard(${c.id});autosave()"><option value="">— Select CPT code —</option>${CPT_OPTS}</select></td><td class="line-units"><input type="number" id="lunits-${c.id}-${lid}" value="1" min="1" max="99" oninput="refreshLine(${c.id},${lid});refreshCard(${c.id});autosave()"/></td><td class="line-rate" id="lrate-${c.id}-${lid}">—</td><td class="line-total" id="ltotal-${c.id}-${lid}">—</td><td style="text-align:center"><button class="del-line-btn" onclick="removeLine(${c.id},${lid})">✕ Remove</button></td>`;
+    tbody.appendChild(tr);
+    const s=document.getElementById(`lcpt-${c.id}-${lid}`);if(s)s.value=l.cpt;
+    const u=document.getElementById(`lunits-${c.id}-${lid}`);if(u)u.value=l.units||1;
+    refreshLine(c.id,lid);
+    updateLineCounter(c.id);
+  });
+  // If no saved lines (or card is not submitted), add one blank starter line
+  if(savedLines.length===0&&!c.submitted){
+    addLine(c.id);
+  }
+  refreshCard(c.id);
+  if(c.submitted)markSubmitted(c.id);
+}
+function cardShell(id){return`
+  <div class="card-header" onclick="toggleBody(${id})">
+    <div class="p-num" id="pnum-${id}">${id}</div>
+    <div class="p-info"><div class="p-name" id="pname-${id}">Patient ${id}</div><div class="p-meta" id="pmeta-${id}">—</div></div>
+    <span class="p-badge empty" id="pbadge-${id}">Empty</span>
+    <span class="p-chevron" id="pchev-${id}">▼</span>
+  </div>
+  <div class="card-body" id="pbody-${id}">
+    <div class="form-row cols-3" style="margin-bottom:14px">
+      <div class="fg" style="grid-column:span 2"><label>Patient Name (Last, First) <span class="req">*</span></label><input type="text" id="pt-name-${id}" placeholder="e.g. Johnson, Maria" oninput="refreshCard(${id})"/></div>
+      <div class="fg"><label>Date of Birth <span class="req">*</span></label><input type="date" id="pt-dob-${id}" oninput="refreshCard(${id})"/></div>
+    </div>
+    <div class="form-row cols-3" style="margin-bottom:14px">
+      <div class="fg"><label>Date of Service <span class="req">*</span></label><input type="date" id="pt-dos-${id}" oninput="refreshCard(${id})"/></div>
+      <div class="fg"><label>Treating Provider <span class="req">*</span></label><select id="pt-prov-${id}" onchange="refreshCard(${id})"><option value="">— Select provider —</option>${PROVIDER_OPTS}</select></div>
+      <div class="fg"><label>Claim # <span class="req">*</span></label><input type="text" id="pt-claim-${id}" placeholder="e.g. 123456" oninput="refreshCard(${id})"/><span class="claim-hint" id="claim-hint-${id}">Will export as <strong>—PPC</strong></span></div>
+    </div>
+    <div class="lines-section">
+      <div class="lines-header">
+        <span class="lines-label">Service Lines <span id="line-counter-${id}" style="font-weight:400;color:var(--text-3)">(0/${MAX_LINES})</span></span>
+        <button class="add-line-btn" id="add-line-btn-${id}" onclick="addLine(${id});refreshCard(${id});autosave()">+ Add Line</button>
+      </div>
+      <div class="lines-table-wrap"><table class="lines-table"><colgroup><col class="col-cpt"/><col class="col-units"/><col class="col-rate"/><col class="col-total"/><col class="col-del"/></colgroup>
+        <thead><tr><th>CPT Code &amp; Description</th><th style="text-align:center">Units</th><th style="text-align:right;padding-right:8px">Rate</th><th style="text-align:right;padding-right:8px">Total</th><th></th></tr></thead>
+        <tbody id="lines-body-${id}"></tbody></table></div>
+      <div class="lines-footer"><div class="lf-item"><span class="lf-label">Lines:</span><span class="lf-val" id="lf-count-${id}">0</span></div><div class="lf-item"><span class="lf-label">Patient Total:</span><span class="lf-val blue" id="lf-total-${id}">$0.00</span></div></div>
+    </div>
+    <div class="fg" style="margin-bottom:14px"><label>Notes / Flags (optional)</label><input type="text" id="pt-notes-${id}" placeholder="Auth needed, flags, treatment notes, etc." oninput="autosave()"/></div>
+    <div class="card-footer">
+      <button class="btn-submit-card" id="pbtn-${id}" disabled onclick="submitCard(${id})">Submit Patient to Log</button>
+      <button class="btn-remove-card" onclick="removeCard(${id})">🗑 Remove Patient</button>
+      <span class="submitted-tag" id="ptag-${id}">Logged ✓ — upload notes in Notes tab</span>
+    </div>
+  </div>`;}
+
+// ── Lines ────────────────────────────────────────────────────
+function addLine(cardId){const card=document.querySelector(`[data-card-id="${cardId}"]`);const tbody=document.getElementById(`lines-body-${cardId}`);if(!tbody||tbody.querySelectorAll('[data-line-id]').length>=MAX_LINES)return null;const lc=parseInt(card.dataset.lineCount)+1;card.dataset.lineCount=String(lc);return addLineWithId(cardId,lc);}
+function addLineWithId(cardId,lid){const tbody=document.getElementById(`lines-body-${cardId}`);if(!tbody||tbody.querySelectorAll('[data-line-id]').length>=MAX_LINES)return null;const tr=document.createElement('tr');tr.dataset.lineId=lid;tr.innerHTML=`<td class="line-cpt"><select id="lcpt-${cardId}-${lid}" onchange="refreshLine(${cardId},${lid});refreshCard(${cardId});autosave()"><option value="">— Select CPT code —</option>${CPT_OPTS}</select></td><td class="line-units"><input type="number" id="lunits-${cardId}-${lid}" value="1" min="1" max="99" oninput="refreshLine(${cardId},${lid});refreshCard(${cardId});autosave()"/></td><td class="line-rate" id="lrate-${cardId}-${lid}">—</td><td class="line-total" id="ltotal-${cardId}-${lid}">—</td><td style="text-align:center"><button class="del-line-btn" onclick="removeLine(${cardId},${lid})">✕ Remove</button></td>`;tbody.appendChild(tr);updateLineCounter(cardId);return lid;}
+function removeLine(cardId,lid){const tr=document.getElementById(`lines-body-${cardId}`)?.querySelector(`[data-line-id="${lid}"]`);if(tr)tr.remove();updateLineCounter(cardId);refreshCard(cardId);autosave();}
+function refreshLine(cardId,lid){const cpt=val(`lcpt-${cardId}-${lid}`);const units=Math.max(1,parseInt(val(`lunits-${cardId}-${lid}`))||1);const r=document.getElementById(`lrate-${cardId}-${lid}`);const t=document.getElementById(`ltotal-${cardId}-${lid}`);if(cpt&&FEES[cpt]){r.textContent=fmt(FEES[cpt].rate);t.textContent=fmt(FEES[cpt].rate*units);}else{r.textContent='—';t.textContent='—';}}
+function updateLineCounter(cardId){const tbody=document.getElementById(`lines-body-${cardId}`);const count=tbody?tbody.querySelectorAll('[data-line-id]').length:0;const el=document.getElementById(`line-counter-${cardId}`);const btn=document.getElementById(`add-line-btn-${cardId}`);if(el)el.textContent=`(${count}/${MAX_LINES})`;if(btn)btn.disabled=count>=MAX_LINES;}
+function getPatientSummary(cardId){const tbody=document.getElementById(`lines-body-${cardId}`);let total=0,lineCount=0;tbody?.querySelectorAll('[data-line-id]').forEach(tr=>{const lid=tr.dataset.lineId;const cpt=val(`lcpt-${cardId}-${lid}`);const units=Math.max(1,parseInt(val(`lunits-${cardId}-${lid}`))||1);if(cpt&&FEES[cpt]){total+=FEES[cpt].rate*units;lineCount++;}});return{total,lineCount};}
+
+// ── Card Refresh ─────────────────────────────────────────────
+function refreshCard(id){
+  const name=val(`pt-name-${id}`).trim(),dob=val(`pt-dob-${id}`),dos=val(`pt-dos-${id}`),provider=val(`pt-prov-${id}`),claimRaw=val(`pt-claim-${id}`).trim();
+  const card=document.querySelector(`[data-card-id="${id}"]`);if(!card)return;
+  const{total,lineCount}=getPatientSummary(id);
+  document.getElementById(`pname-${id}`).textContent=name||`Patient ${id}`;
+  document.getElementById(`pnum-${id}`).className=name?'p-num filled':'p-num';
+  const hint=document.getElementById(`claim-hint-${id}`);
+  if(hint)hint.innerHTML=claimRaw?`Will export as <strong>${sanitizeClaim(claimRaw)}PPC</strong>`:'Will export as <strong>—PPC</strong>';
+  const parts=[provider?provider.split(',')[0]:'',dos?`DOS: ${fmtDate(dos)}`:'',lineCount?`${lineCount} line${lineCount>1?'s':''}  ${fmt(total)}`:''].filter(Boolean);
+  document.getElementById(`pmeta-${id}`).textContent=parts.join('  ·  ')||'—';
+  document.getElementById(`lf-count-${id}`).textContent=lineCount;
+  document.getElementById(`lf-total-${id}`).textContent=fmt(total);
+  const filled=name&&dob&&dos&&provider&&claimRaw&&lineCount>0;
+  const pbtn=document.getElementById(`pbtn-${id}`);if(pbtn)pbtn.disabled=!filled;
+  const pbadge=document.getElementById(`pbadge-${id}`);
+  if(filled){pbadge.textContent='Ready';pbadge.className='p-badge ready';card.classList.add('has-data');}
+  else if(name||dob||dos||provider||claimRaw||lineCount>0){pbadge.textContent='In progress';pbadge.className='p-badge progress';card.classList.add('has-data');}
+  else{pbadge.textContent='Empty';pbadge.className='p-badge empty';card.classList.remove('has-data');}
+  autosave();
+}
+function toggleBody(id,forceOpen){const body=document.getElementById(`pbody-${id}`);const chev=document.getElementById(`pchev-${id}`);const card=document.querySelector(`[data-card-id="${id}"]`);const open=forceOpen!==undefined?forceOpen:!body?.classList.contains('open');body?.classList.toggle('open',open);chev?.classList.toggle('open',open);card?.classList.toggle('open',open);}
+function removeCard(id){
+  const el=document.querySelector(`[data-card-id="${id}"]`);
+  if(!el)return;
+  const isSubmitted=el.classList.contains('submitted');
+  const name=val(`pt-name-${id}`).trim()||`Patient ${id}`;
+  if(isSubmitted){
+    if(!confirm(`"${name}" has already been submitted to the biller log.\n\nRemoving the card here will NOT remove it from the biller log — Ashleigh will still see it.\n\nRemove this card from your view?`))return;
+  }
+  el.remove();autosave();checkAllSubmittedBanner();
+}
+function checkAllSubmittedBanner(){
+  const banner=document.getElementById('all-submitted-banner');
+  const container=document.getElementById('cards-container');
+  const all=container?container.querySelectorAll('[data-card-id]'):[];
+  const submitted=container?container.querySelectorAll('[data-card-id].submitted'):[];
+  const allDone=all.length>0&&all.length===submitted.length;
+  if(banner)banner.style.display=allDone?'block':'none';
+  const fabCount=document.getElementById('fab-count');
+  if(fabCount)fabCount.textContent=all.length>0?`${submitted.length}/${all.length}`:'';
+}
+
+// ── Submit Card ──────────────────────────────────────────────
+function submitCard(id){
+  const name=val(`pt-name-${id}`).trim(),dob=val(`pt-dob-${id}`),dos=val(`pt-dos-${id}`),provider=val(`pt-prov-${id}`),claimRaw=val(`pt-claim-${id}`).trim(),notes=val(`pt-notes-${id}`).trim();
+  const submittedBy=val('prov-contact').trim(),dateRec=val('prov-date')||today(),claimNum=fmtClaimNum(claimRaw);
+  if(!name||!dob||!dos||!provider||!claimRaw){showToast('Please fill all required fields','red');return;}
+  const lines=[];
+  document.getElementById(`lines-body-${id}`)?.querySelectorAll('[data-line-id]').forEach(tr=>{const lid=tr.dataset.lineId;const cpt=val(`lcpt-${id}-${lid}`);const units=Math.max(1,parseInt(val(`lunits-${id}-${lid}`))||1);if(cpt&&FEES[cpt])lines.push({cptCode:cpt,cptDesc:FEES[cpt].desc,units,rate:FEES[cpt].rate,total:FEES[cpt].rate*units});});
+  if(lines.length===0){showToast('Add at least one service line','red');return;}
+  log.push({submittedAt:Date.now(),dateReceived:dateRec,submittedBy,patient:name,dob,dos,provider,claimNum,notes,lines,patientTotal:lines.reduce((s,l)=>s+l.total,0),status:'needs-export',pdfFilename:null});
+  markSubmitted(id);updateBadge();updateNotesBadges();saveState();
+  showToast(`${name} (${claimNum}) logged ✓`,'green');
+  setTimeout(()=>{const container=document.getElementById('cards-container');const next=container?.querySelector('[data-card-id]:not(.submitted)');if(next){const nid=next.dataset.cardId;toggleBody(nid,true);next.scrollIntoView({behavior:'smooth',block:'nearest'});}},300);
+}
+function markSubmitted(id){
+  const card=document.querySelector(`[data-card-id="${id}"]`);if(!card)return;
+  card.classList.add('submitted');
+  const pb=document.getElementById(`pbadge-${id}`);if(pb){pb.textContent='Submitted';pb.className='p-badge done';}
+  const pn=document.getElementById(`pnum-${id}`);if(pn)pn.className='p-num done';
+  const btn=document.getElementById(`pbtn-${id}`);if(btn)btn.disabled=true;
+  const tag=document.getElementById(`ptag-${id}`);if(tag)tag.classList.add('show');
+  toggleBody(id,false);checkAllSubmittedBanner();
+}
+
+// ── Notes Upload (Pathways) ──────────────────────────────────
+function nuRefreshClaims(){
+  const submittedClaims=log;
+  const noClaimsEl=document.getElementById('nu-no-claims');
+  const formWrap=document.getElementById('nu-form-wrap');
+  if(submittedClaims.length===0){noClaimsEl.style.display='block';formWrap.style.display='none';return;}
+  noClaimsEl.style.display='none';formWrap.style.display='block';
+  const select=document.getElementById('nu-claim-select');
+  select.innerHTML='<option value="">— Select a submitted claim —</option>';
+  submittedClaims.forEach((r,i)=>{
+    const opt=document.createElement('option');opt.value=i;
+    const hasPDF=r.pdfFilename?' ✓':'';
+    opt.textContent=`${r.claimNum} — ${r.patient} — DOS: ${fmtDate(r.dos)}${hasPDF}`;
+    if(r.pdfFilename)opt.style.color='#2E8B6A';
+    select.appendChild(opt);
+  });
+}
+function nuOnClaimSelect(){
+  const idx=document.getElementById('nu-claim-select').value;
+  const preview=document.getElementById('nu-preview');
+  const alreadyWarn=document.getElementById('nu-already-warn');
+  nuResetDrop();
+  if(idx===''){preview.classList.remove('show');nuUpdateSubmitBtn();return;}
+  const r=log[parseInt(idx)];
+  document.getElementById('nu-cp-num').textContent=r.claimNum;
+  document.getElementById('nu-cp-patient').textContent=r.patient;
+  document.getElementById('nu-cp-provider').textContent=r.provider;
+  document.getElementById('nu-cp-dos').textContent=fmtDate(r.dos);
+  alreadyWarn.style.display=r.pdfFilename?'flex':'none';
+  preview.classList.add('show');
+  nuUpdateFilenamePreview();nuUpdateSubmitBtn();
+}
+function nuDragOver(e){e.preventDefault();document.getElementById('nu-drop').classList.add('dragover');}
+function nuDragLeave(e){document.getElementById('nu-drop').classList.remove('dragover');}
+function nuDrop(e){e.preventDefault();document.getElementById('nu-drop').classList.remove('dragover');const f=e.dataTransfer.files[0];if(f)nuHandleFile(f);}
+function nuFileSelect(e){const f=e.target.files[0];if(f)nuHandleFile(f);}
+function nuHandleFile(file){
+  if(file.type!=='application/pdf'){showToast('PDF files only','red');return;}
+  if(file.size>10*1024*1024){showToast('PDF must be under 10MB','red');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    nuCurrentPDF={name:file.name,size:fmtSize(file.size),dataURL:e.target.result};
+    const dz=document.getElementById('nu-drop');dz.classList.add('has-file');
+    document.getElementById('nu-dz-icon').textContent='✅';
+    document.getElementById('nu-dz-title').textContent='PDF attached';
+    document.getElementById('nu-dz-sub').textContent='Click or drop to replace';
+    const fn=document.getElementById('nu-dz-filename'),fs=document.getElementById('nu-dz-size');
+    fn.textContent=file.name;fn.style.display='block';
+    fs.textContent=fmtSize(file.size);fs.style.display='block';
+    nuUpdateFilenamePreview();nuUpdateSubmitBtn();
+  };
+  reader.readAsDataURL(file);
+}
+function nuResetDrop(){
+  nuCurrentPDF=null;
+  const dz=document.getElementById('nu-drop');dz.classList.remove('has-file','dragover');
+  document.getElementById('nu-dz-icon').textContent='📄';
+  document.getElementById('nu-dz-title').textContent='Click to upload or drag & drop';
+  document.getElementById('nu-dz-sub').textContent='PDF only · Max 10MB';
+  document.getElementById('nu-dz-filename').style.display='none';
+  document.getElementById('nu-dz-size').style.display='none';
+  document.getElementById('nu-file-input').value='';
+  document.getElementById('nu-filename-preview').classList.remove('show');
+  nuUpdateSubmitBtn();
+}
+function nuUpdateFilenamePreview(){
+  const idx=document.getElementById('nu-claim-select').value;
+  const preview=document.getElementById('nu-filename-preview');
+  if(idx===''||!nuCurrentPDF){preview.classList.remove('show');return;}
+  const r=log[parseInt(idx)];
+  document.getElementById('nu-fpb-name').textContent=buildPDFFilename(r.claimNum,r.patient,r.dos);
+  preview.classList.add('show');
+}
+function nuUpdateSubmitBtn(){
+  const idx=document.getElementById('nu-claim-select').value;
+  document.getElementById('nu-btn-submit').disabled=(idx===''||!nuCurrentPDF);
+}
+function nuSubmit(){
+  const idx=parseInt(document.getElementById('nu-claim-select').value);
+  const r=log[idx];if(!r||!nuCurrentPDF)return;
+  const filename=buildPDFFilename(r.claimNum,r.patient,r.dos);
+  downloadPDF(nuCurrentPDF.dataURL,filename);
+  // Update log entry with filename
+  log[idx].pdfFilename=filename;
+  saveState();updateNotesBadges();
+  nuLastDownload={dataURL:nuCurrentPDF.dataURL,filename};
+  nuSessionUploads.push({claimNum:r.claimNum,patient:r.patient,filename,dataURL:nuCurrentPDF.dataURL,ts:Date.now()});
+  document.getElementById('nu-card').style.display='none';
+  const succ=document.getElementById('nu-success');succ.style.display='block';succ.classList.add('show');
+  document.getElementById('nu-success-filename').textContent=filename;
+  nuRenderSessionUploads();
+  if(currentRole==='pathways')nuRefreshClaims();
+}
+function nuRedownload(){if(nuLastDownload)downloadPDF(nuLastDownload.dataURL,nuLastDownload.filename);showToast('Re-downloading...','green');}
+function nuReset(){
+  document.getElementById('nu-card').style.display='block';
+  const succ=document.getElementById('nu-success');succ.style.display='none';succ.classList.remove('show');
+  document.getElementById('nu-claim-select').value='';
+  document.getElementById('nu-preview').classList.remove('show');
+  nuResetDrop();nuRefreshClaims();
+}
+function nuRenderSessionUploads(){
+  const section=document.getElementById('nu-session-uploads');
+  const list=document.getElementById('nu-session-list');
+  const count=document.getElementById('nu-session-count');
+  if(!nuSessionUploads.length){section.style.display='none';return;}
+  section.style.display='block';count.textContent=nuSessionUploads.length;
+  list.innerHTML=nuSessionUploads.map((u,i)=>`
+    <div class="su-item">
+      <span class="su-icon">📄</span>
+      <div class="su-info"><div class="su-filename" title="${u.filename}">${u.filename}</div><div class="su-meta">${u.patient} · ${fmtTime(u.ts)}</div></div>
+      <button class="su-btn" onclick="nuRedownloadItem(${i})">Re-download</button>
+    </div>`).join('');
+}
+function nuRedownloadItem(i){const u=nuSessionUploads[i];if(u)downloadPDF(u.dataURL,u.filename);showToast('Re-downloading...','green');}
+
+// ── PDF Download ─────────────────────────────────────────────
+function downloadPDF(dataURL,filename){
+  const b=atob(dataURL.split(',')[1]);const ab=new ArrayBuffer(b.length);const ia=new Uint8Array(ab);
+  for(let i=0;i<b.length;i++)ia[i]=b.charCodeAt(i);
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([ab],{type:'application/pdf'})),download:filename});
+  a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+
+// ── Notes View (Ashleigh) ────────────────────────────────────
+function renderNotesOPM(){
+  const tbody=document.getElementById('notes-opm-body');if(!tbody)return;
+  const total=log.length,attached=log.filter(r=>r.pdfFilename).length,missing=total-attached;
+  document.getElementById('notes-sum-total').textContent=total;
+  document.getElementById('notes-sum-attached').textContent=attached;
+  document.getElementById('notes-sum-missing').textContent=missing;
+  document.getElementById('notes-opm-sub').textContent=total?`${total} claim${total>1?'s':''} · ${attached} with notes · ${missing} missing`:'No claims yet';
+  if(total===0){tbody.innerHTML=`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No claims submitted yet</div></div></td></tr>`;return;}
+  tbody.innerHTML=log.map((r,i)=>{
+    const isMissing=!r.pdfFilename;
+    const pdfCell=r.pdfFilename
+      ?`<span class="pdf-pill attached">✓ ${r.pdfFilename}</span>`
+      :`<span class="pdf-pill missing">⚠ Missing</span>`;
+    const statusClass=`status-select ${r.status}`;
+    return`<tr class="${isMissing?'missing-row':''}">
+      <td><span class="claim-num-badge">${r.claimNum}</span></td>
+      <td style="font-weight:600">${r.patient}</td>
+      <td class="td-mono">${fmtDate(r.dos)}</td>
+      <td style="font-size:12px;color:var(--text-2)">${r.provider}</td>
+      <td class="td-mono">${fmtDate(r.dateReceived)}</td>
+      <td><select class="${statusClass}" onchange="updateStatus(${i},this)">
+        <option value="needs-export" ${r.status==='needs-export'?'selected':''}>Needs Export</option>
+        <option value="export-finalized" ${r.status==='export-finalized'?'selected':''}>Export Finalized</option>
+        <option value="submitted" ${r.status==='submitted'?'selected':''}>Submitted MD</option>
+        <option value="paid" ${r.status==='paid'?'selected':''}>Paid</option>
+        <option value="workable" ${r.status==='workable'?'selected':''}>Workable</option>
+      </select></td>
+      <td>${pdfCell}</td>
+    </tr>`;}).join('');
+}
+
+// ── Badges ───────────────────────────────────────────────────
+function updateNotesBadges(){
+  const missing=log.filter(r=>!r.pdfFilename).length;
+  // OPM notes badge
+  const opmBadge=document.getElementById('notes-missing-opm-badge');
+  if(opmBadge){opmBadge.textContent=missing>0?missing:'';opmBadge.classList.toggle('visible',missing>0);}
+  // Pathways notes badge (prompt them to upload)
+  const pathBadge=document.getElementById('notes-missing-badge');
+  if(pathBadge){pathBadge.textContent=missing>0?`${missing} needed`:'';pathBadge.classList.toggle('visible',missing>0);}
+}
+
+// ── Biller Log ───────────────────────────────────────────────
+function updateBadge(){const b=document.getElementById('log-badge');if(!b)return;const total=log.reduce((s,r)=>s+r.lines.length,0);b.textContent=total;b.classList.toggle('visible',total>0);}
+function setStatusFilter(f){statusFilter=f;document.querySelectorAll('.sf-pill').forEach(p=>p.classList.toggle('active',p.dataset.filter===f));renderLog();}
+function renderLog(){
+  const tbody=document.getElementById('log-body');if(!tbody)return;
+  const counts={all:log.length,'needs-export':0,'export-finalized':0,submitted:0,paid:0,workable:0};
+  log.forEach(r=>{if(counts[r.status]!==undefined)counts[r.status]++;});
+  ['all','needs-export','export-finalized','submitted','paid','workable'].forEach(k=>{const el=document.getElementById(`sf-count-${k}`);if(el)el.textContent=counts[k]||0;});
+  const totalLines=log.reduce((s,r)=>s+r.lines.length,0),totalBilled=log.reduce((s,r)=>s+r.patientTotal,0),needsExport=counts['needs-export'];
+  document.getElementById('sum-patients').textContent=log.length;
+  document.getElementById('sum-billed').textContent=fmt(totalBilled);
+  document.getElementById('sum-needs-export').textContent=needsExport;
+  document.getElementById('log-sub').textContent=log.length?`${log.length} patient${log.length>1?'s':''} · ${totalLines} line${totalLines>1?'s':''} · ${fmt(totalBilled)} total billed`:'No claims yet';
+  const hasData=log.length>0;
+  document.getElementById('helix-bar').style.display=hasData?'flex':'none';
+  document.getElementById('cycle-panel').style.display=hasData?'block':'none';
+  document.getElementById('status-filter-bar').style.display=hasData?'flex':'none';
+  const exportAllBtn=document.getElementById('btn-export-all');
+  const filterActive=val('cycle-from')||val('cycle-to');
+  if(exportAllBtn)exportAllBtn.textContent=filterActive?'Export All CSV (unfiltered)':'Export All CSV';
+  const filtered=statusFilter==='all'?log:log.filter(r=>r.status===statusFilter);
+  if(filtered.length===0){tbody.innerHTML=`<tr><td colspan="14"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">${log.length===0?'No claims submitted yet':'No claims match this filter'}</div><div>${log.length===0?'Pathways staff submit claims and they appear here':'Try a different filter'}</div></div></td></tr>`;return;}
+  let html='';
+  filtered.forEach((r,fi)=>{
+    const pi=log.indexOf(r);
+    r.lines.forEach((line,li)=>{
+      const isFirst=li===0,isLast=li===r.lines.length-1;
+      html+=`<tr>`;
+      if(isFirst){
+        html+=`<td rowspan="${r.lines.length}" style="vertical-align:top;padding-top:12px;text-align:center"><input type="checkbox" class="helix-chk" data-idx="${pi}" onchange="onCheckChange()" style="accent-color:var(--green);cursor:pointer;width:15px;height:15px"/></td>`;
+        html+=`<td rowspan="${r.lines.length}" style="vertical-align:top;padding-top:10px;border-left:2px solid var(--blue-light)"><span class="claim-num-badge">${r.claimNum}</span></td>`;
+        html+=`<td rowspan="${r.lines.length}" style="font-weight:600;vertical-align:top;padding-top:10px;white-space:normal;word-break:break-word">${r.patient}<br><span style="font-size:10px;color:var(--text-3);font-weight:400">${fmtDate(r.dateReceived)}</span></td>`;
+        html+=`<td rowspan="${r.lines.length}" class="td-mono" style="vertical-align:top;padding-top:10px">${fmtDate(r.dob)}</td>`;
+        html+=`<td rowspan="${r.lines.length}" class="td-mono" style="vertical-align:top;padding-top:10px">${fmtDate(r.dos)}</td>`;
+        html+=`<td rowspan="${r.lines.length}" style="vertical-align:top;padding-top:10px;font-size:12px;color:var(--text-2);white-space:normal;word-break:break-word">${r.provider}</td>`;
+      }
+      html+=`<td class="td-mono">${line.cptCode}</td><td style="font-size:12px;color:var(--text-2);white-space:normal;word-break:break-word">${line.cptDesc}</td><td style="text-align:center">${line.units}</td><td class="td-amt">${fmt(line.rate)}</td><td class="td-total">${fmt(line.total)}</td>`;
+      if(isFirst){
+        const pdfCell=r.pdfFilename?`<span class="pdf-pill attached" title="${r.pdfFilename}">✓ PDF</span>`:`<span class="pdf-pill missing">⚠ Missing</span>`;
+        html+=`<td rowspan="${r.lines.length}" style="vertical-align:top;padding-top:8px">${pdfCell}</td>`;
+        html+=`<td rowspan="${r.lines.length}" style="vertical-align:top;padding-top:8px"><select class="status-select ${r.status}" onchange="updateStatus(${pi},this)"><option value="needs-export" ${r.status==='needs-export'?'selected':''}>Needs Export</option><option value="export-finalized" ${r.status==='export-finalized'?'selected':''}>Export Finalized</option><option value="submitted" ${r.status==='submitted'?'selected':''}>Submitted MD</option><option value="paid" ${r.status==='paid'?'selected':''}>Paid</option><option value="workable" ${r.status==='workable'?'selected':''}>Workable</option></select></td>`;
+        html+=`<td rowspan="${r.lines.length}" style="vertical-align:top;padding-top:8px"><button class="del-row-btn" onclick="deletePatient(${pi})">×</button></td>`;
+      }
+      html+=`</tr>`;
+      if(isLast){html+=`<tr class="subtotal-row"><td></td><td colspan="4" style="border-left:2px solid var(--blue-light)"></td><td colspan="3" style="font-size:11px;font-weight:600;color:var(--blue-dark);text-align:right;padding-right:8px">Patient Total</td><td style="font-weight:700;color:var(--blue-dark);text-align:right">${fmt(r.patientTotal)}</td><td colspan="4" style="font-size:11px;color:var(--text-3)">${r.notes||''}</td></tr><tr class="spacer-row"><td colspan="14"></td></tr>`;}
+    });
+  });
+  tbody.innerHTML=html;
+}
+function updateStatus(i,sel){log[i].status=sel.value;sel.className=`status-select ${sel.value}`;saveState();renderLog();if(document.getElementById('view-notes-opm').classList.contains('active'))renderNotesOPM();}
+function deletePatient(i){log.splice(i,1);saveState();updateBadge();updateNotesBadges();renderLog();}
+
+// ── Helix Remove ─────────────────────────────────────────────
+function onCheckChange(){const checked=document.querySelectorAll('.helix-chk:checked').length,total=document.querySelectorAll('.helix-chk').length;const btn=document.getElementById('btn-remove-selected');if(btn){btn.disabled=checked===0;btn.textContent=checked>0?`Remove ${checked} Patient${checked>1?'s':''} from Log`:'Remove Selected';}const allChk=document.getElementById('chk-all');if(allChk)allChk.checked=checked>0&&checked===total;}
+function toggleSelectAll(masterChk){const chks=document.querySelectorAll('.helix-chk');const should=masterChk?masterChk.checked:(document.querySelectorAll('.helix-chk:checked').length<chks.length);chks.forEach(c=>c.checked=should);const master=document.getElementById('chk-all');if(master)master.checked=should;onCheckChange();}
+function removeSelected(){const checked=Array.from(document.querySelectorAll('.helix-chk:checked'));if(!checked.length)return;const idxs=checked.map(c=>parseInt(c.dataset.idx));const names=idxs.map(i=>log[i]?.patient).filter(Boolean).join(', ');if(!confirm(`Remove ${idxs.length} patient${idxs.length>1?'s':''} from the log?\n\n${names}\n\nThis confirms they have been submitted to Helix.`))return;idxs.sort((a,b)=>b-a).forEach(i=>log.splice(i,1));saveState();updateBadge();updateNotesBadges();renderLog();showToast(`${idxs.length} patient${idxs.length>1?'s':''} removed`,'green');}
+function confirmClearLog(){if(!log.length)return;if(confirm(`Clear all ${log.length} patients from the log?`)){log=[];saveState();updateBadge();updateNotesBadges();renderLog();showToast('Log cleared');}}
+
+// ── CSV Export ───────────────────────────────────────────────
+function buildCSVRows(dataset){
+  const headers=['Claim #','Patient','DOB','DOS','Provider','CPT','Description','Units','Rate','Total'];
+  const rows=[];
+  dataset.forEach(r=>{r.lines.forEach(line=>{rows.push([r.claimNum,r.patient,fmtDate(r.dob),fmtDate(r.dos),r.provider,line.cptCode,line.cptDesc,line.units,line.rate.toFixed(2),line.total.toFixed(2)].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','));});});
+  return[headers.join(','),...rows].join('\n');
+}
+function exportCSV(dataset){
+  const data=dataset||log;if(!data.length){showToast('No claims to export');return;}
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([buildCSVRows(data)],{type:'text/csv'})),download:`Pathways_Claims_${today()}.csv`});a.click();
+  showToast(`Exported ${data.reduce((s,r)=>s+r.lines.length,0)} lines for ${data.length} patients`,'green');
+}
+let filterMode2='received';
+function setFilterMode(mode){filterMode2=mode;document.getElementById('toggle-received')?.classList.toggle('active',mode==='received');document.getElementById('toggle-dos')?.classList.toggle('active',mode==='dos');updateCyclePreview();}
+function getFilteredLog(){const from=val('cycle-from'),to=val('cycle-to');if(!from&&!to)return null;return log.filter(r=>{const d=filterMode2==='received'?r.dateReceived:r.dos;if(!d)return false;if(from&&d<from)return false;if(to&&d>to)return false;return true;});}
+function updateCyclePreview(){
+  const from=val('cycle-from'),to=val('cycle-to');
+  const previewEl=document.getElementById('cycle-preview-text'),btnEl=document.getElementById('btn-export-filtered'),exportAllBtn=document.getElementById('btn-export-all');
+  if(exportAllBtn)exportAllBtn.textContent=(from||to)?'Export All CSV (unfiltered)':'Export All CSV';
+  if(!from&&!to){previewEl.textContent='Set a date range above to preview';previewEl.className='cycle-preview-text none';btnEl.disabled=true;return;}
+  const filtered=getFilteredLog();const patients=filtered.length,lines=filtered.reduce((s,r)=>s+r.lines.length,0),total=filtered.reduce((s,r)=>s+r.patientTotal,0);
+  const modeLabel=filterMode2==='received'?'date received':'date of service';
+  const rangeLabel=from&&to?`${fmtDate(from)} — ${fmtDate(to)}`:from?`on or after ${fmtDate(from)}`:`on or before ${fmtDate(to)}`;
+  if(!patients){previewEl.innerHTML=`No claims match <strong>${modeLabel}</strong> ${rangeLabel}`;previewEl.className='cycle-preview-text none';btnEl.disabled=true;}
+  else{previewEl.innerHTML=`<strong>${patients}</strong> patient${patients>1?'s':''} · <strong>${lines}</strong> line${lines>1?'s':''} · <strong>${fmt(total)}</strong> &nbsp;·&nbsp; ${modeLabel} ${rangeLabel}`;previewEl.className='cycle-preview-text';btnEl.disabled=false;}
+}
+function exportFilteredCSV(){
+  const filtered=getFilteredLog();if(!filtered?.length){showToast('No claims match that date range');return;}
+  const to=val('cycle-to'),from=val('cycle-from'),suffix=to?`thru_${to}`:from?`from_${from}`:today();
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([buildCSVRows(filtered)],{type:'text/csv'})),download:`Pathways_Claims_Cycle_${suffix}.csv`});a.click();
+  showToast(`Exported ${filtered.reduce((s,r)=>s+r.lines.length,0)} lines for ${filtered.length} patients`,'green');
+}
+
+// ── Shortcuts ────────────────────────────────────────────────
+function buildShortcutsView(role){
+  const pathwaysGroups=[{title:'Between Patient Cards',items:[{desc:'Next patient card',keys:['Ctrl','→']},{desc:'Previous patient card',keys:['Ctrl','←']},{desc:'Add new patient card',keys:['Alt','N']},{desc:'Collapse current card',keys:['Esc']}]},{title:'Within a Card',items:[{desc:'Next field',keys:['Tab']},{desc:'Previous field',keys:['Shift','Tab']},{desc:'Add service line',keys:['Alt','L']},{desc:'Submit patient to log',keys:['Ctrl','Enter']}]},{title:'General',items:[{desc:'Force save',keys:['Ctrl','S']},{desc:'Open shortcuts',keys:['?']}]}];
+  const opmGroups=[{title:'Log Navigation',items:[{desc:'Export all CSV',keys:['Ctrl','E']},{desc:'Export filtered CSV',keys:['Ctrl','Shift','E']},{desc:'Force save',keys:['Ctrl','S']}]},{title:'Status Filters',items:[{desc:'Show all claims',keys:['Alt','A']},{desc:'Show Needs Export',keys:['Alt','1']},{desc:'Show Export Finalized',keys:['Alt','2']},{desc:'Show Paid',keys:['Alt','3']}]}];
+  const groups=role==='pathways'?pathwaysGroups:opmGroups;
+  const noteText=role==='pathways'?'Tip: Tab through each field for fastest data entry. Hit Ctrl+Enter to submit a ready card.':'Tip: Use Alt+1 to quickly see what needs to be exported to MoveDocs before the funding cycle cutoff.';
+  const grid=document.getElementById('shortcuts-grid');if(!grid)return;
+  grid.innerHTML=groups.map(g=>`<div class="shortcut-group"><div class="shortcut-group-title">${g.title}</div>${g.items.map(item=>`<div class="shortcut-row"><span class="shortcut-desc">${item.desc}</span><div class="shortcut-keys">${item.keys.map((k,i)=>`<span class="key">${k}</span>${i<item.keys.length-1?'<span class="key-sep">+</span>':''}`).join('')}</div></div>`).join('')}</div>`).join('');
+  const note=document.getElementById('shortcuts-note');if(note)note.textContent=noteText;
+}
+
+// ── Keyboard Shortcuts ───────────────────────────────────────
+function getOpenCardId(){const c=document.getElementById('cards-container');const open=c?.querySelector('[data-card-id].open');return open?parseInt(open.dataset.cardId):null;}
+function getAllCardIds(){const c=document.getElementById('cards-container');return c?Array.from(c.querySelectorAll('[data-card-id]')).map(el=>parseInt(el.dataset.cardId)):[];}
+document.addEventListener('keydown',e=>{
+  const inInput=e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA';
+  if(e.ctrlKey&&e.key==='s'){e.preventDefault();saveState();showToast('Saved','green');return;}
+  if(currentRole==='pathways'){
+    if(e.ctrlKey&&(e.key==='ArrowRight'||e.key==='ArrowLeft')){e.preventDefault();const ids=getAllCardIds();if(!ids.length)return;const openId=getOpenCardId();const idx=openId?ids.indexOf(openId):-1;const next=e.key==='ArrowRight'?Math.min(idx+1,ids.length-1):Math.max(idx-1,0);if(idx!==next){if(openId)toggleBody(openId,false);toggleBody(ids[next],true);document.querySelector(`[data-card-id="${ids[next]}"]`).scrollIntoView({behavior:'smooth',block:'nearest'});const fi=document.getElementById(`pt-name-${ids[next]}`);if(fi)setTimeout(()=>fi.focus(),150);}return;}
+    if(e.altKey&&e.key.toLowerCase()==='n'){e.preventDefault();addCard();return;}
+    if(e.altKey&&e.key.toLowerCase()==='l'){e.preventDefault();const id=getOpenCardId();if(id){addLine(id);refreshCard(id);autosave();}return;}
+    if(e.key==='Escape'&&!inInput){const id=getOpenCardId();if(id)toggleBody(id,false);return;}
+    if(e.key==='Enter'&&e.ctrlKey){const id=getOpenCardId();if(id)submitCard(id);return;}
+    if(e.key==='?'&&!inInput){switchView('shortcuts');return;}
+  }
+  if(currentRole==='opm'){
+    if(e.ctrlKey&&e.key==='e'&&!e.shiftKey){e.preventDefault();exportCSV(null);return;}
+    if(e.ctrlKey&&e.shiftKey&&e.key==='E'){e.preventDefault();exportFilteredCSV();return;}
+    if(e.altKey&&e.key==='a'){e.preventDefault();setStatusFilter('all');return;}
+    if(e.altKey&&e.key==='1'){e.preventDefault();setStatusFilter('needs-export');return;}
+    if(e.altKey&&e.key==='2'){e.preventDefault();setStatusFilter('export-finalized');return;}
+    if(e.altKey&&e.key==='3'){e.preventDefault();setStatusFilter('paid');return;}
+    if(e.key==='?'&&!inInput){switchView('shortcuts');return;}
+  }
+});
+
+// ── Init ─────────────────────────────────────────────────────
+// Clear stale data from old versions
+['opm_ppc_','opm_ppc2_','opm_ppc3_','opm_ppc4_','opm_ppc5_','opm_ppc6_'].forEach(oldKey=>{
+  ['prov','cards','log','count','role','pdfs'].forEach(k=>localStorage.removeItem(oldKey+k));
+});
+document.getElementById('prov-date').value=today();
+
+// Initialize MSAL then restore role
+(async()=>{
+  try {
+    msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+    await msalInstance.initialize();
+    const accounts = msalInstance.getAllAccounts();
+    if(accounts.length>0){ msalAccount=accounts[0]; syncEnabled=true; }
+  } catch(e){ console.warn('MSAL init error:',e); }
+
+  const savedRole=localStorage.getItem(LS+'role');
+  if(savedRole==='pathways'){ applyRole('pathways'); }
+  else if(savedRole==='opm'){ document.getElementById('role-screen').classList.add('hidden'); document.getElementById('pin-screen').classList.remove('hidden'); }
+})();
+</script>
+</body>
+</html>
