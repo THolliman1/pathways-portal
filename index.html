@@ -416,6 +416,13 @@ table.notes tbody tr.missing-row:hover td{background:#FFF0CC}
 .empty-icon{font-size:34px;margin-bottom:10px;opacity:0.35}
 .empty-title{font-size:15px;font-weight:600;color:var(--text-2);margin-bottom:4px}
 
+/* ── CLEAR DATA BAR (PATHWAYS) ── */
+.clear-data-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--red-light);border:1px solid #F5A0A0;border-radius:var(--radius);margin-top:1rem;flex-wrap:wrap}
+.clear-data-text{font-size:12px;font-weight:600;color:var(--red)}
+.clear-data-sub{font-size:11px;color:var(--text-2);margin-top:2px}
+.btn-clear-data{font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--radius);border:1px solid var(--red);background:white;color:var(--red);cursor:pointer;font-family:inherit;transition:all 0.12s;white-space:nowrap}
+.btn-clear-data:hover{background:var(--red);color:white}
+
 /* ── FAB ── */
 .fab-wrap{position:fixed;bottom:1.75rem;left:50%;transform:translateX(-50%);z-index:200;pointer-events:none}
 .fab{display:flex;align-items:center;gap:10px;padding:13px 24px;background:var(--blue-dark);color:white;border:none;border-radius:50px;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;box-shadow:0 4px 20px rgba(58,126,173,0.45);pointer-events:all;transition:background 0.15s,transform 0.15s,box-shadow 0.15s;white-space:nowrap}
@@ -573,6 +580,14 @@ table.notes tbody tr.missing-row:hover td{background:#FFF0CC}
     </div>
     <div id="cards-container"></div>
     <div style="height:88px"></div>
+    <!-- Clear data bar — shown when submitted cards exist -->
+    <div class="clear-data-bar" id="clear-data-bar" style="display:none">
+      <div>
+        <div class="clear-data-text">🗑 Remove All Patient Data</div>
+        <div class="clear-data-sub">Clears all cards and claim data from this device. Notes in the Pathways Notes folder are not affected.</div>
+      </div>
+      <button class="btn-clear-data" onclick="clearPathwaysData()">Remove All Patients</button>
+    </div>
   </div>
 
   <!-- PATHWAYS: UPLOAD NOTES -->
@@ -618,7 +633,7 @@ table.notes tbody tr.missing-row:hover td{background:#FFF0CC}
             <div class="fpb-name" id="nu-fpb-name">—</div>
             <div class="fpb-hint">Move this file to the shared folder after downloading.</div>
           </div>
-          <button class="btn-submit-note" id="nu-btn-submit" disabled onclick="nuSubmit()">Download &amp; Submit Note</button>
+          <button class="btn-submit-note" id="nu-btn-submit" disabled onclick="nuSubmit()">Upload Note to OneDrive</button>
         </div>
         <div class="nu-success" id="nu-success">
           <div class="nu-success-icon">✅</div>
@@ -1401,6 +1416,29 @@ function checkAllSubmittedBanner(){
   if(banner)banner.style.display=allDone?'block':'none';
   const fabCount=document.getElementById('fab-count');
   if(fabCount)fabCount.textContent=all.length>0?`${submitted.length}/${all.length}`:'';
+  // Show clear data bar when there are submitted cards
+  const clearBar=document.getElementById('clear-data-bar');
+  if(clearBar)clearBar.style.display=submitted.length>0?'flex':'none';
+}
+
+function clearPathwaysData(){
+  const container=document.getElementById('cards-container');
+  const submitted=container?container.querySelectorAll('[data-card-id].submitted').length:0;
+  if(submitted===0)return;
+  if(!confirm(`Remove all ${submitted} submitted patient${submitted>1?'s':''} from your view?\n\nThis clears your local data only. Notes in the Pathways Notes folder are NOT deleted.\n\nOPM will still see all submitted claims in their biller log.`))return;
+  // Clear cards from DOM
+  if(container)container.innerHTML='';
+  // Clear localStorage cards and cards count — keep log intact on OPM side
+  try{
+    localStorage.removeItem(LS+'cards');
+    localStorage.setItem(LS+'count','0');
+  }catch(e){}
+  cardCount=0;
+  // Save to OneDrive with empty cards
+  saveState();
+  checkAllSubmittedBanner();
+  addCard(false);
+  showToast('All patient data cleared','green');
 }
 
 // ── Submit Card ──────────────────────────────────────────────
@@ -1503,21 +1541,76 @@ function nuUpdateSubmitBtn(){
   const idx=document.getElementById('nu-claim-select').value;
   document.getElementById('nu-btn-submit').disabled=(idx===''||!nuCurrentPDF);
 }
-function nuSubmit(){
+async function nuSubmit(){
   const idx=parseInt(document.getElementById('nu-claim-select').value);
   const r=log[idx];if(!r||!nuCurrentPDF)return;
   const filename=buildPDFFilename(r.claimNum,r.patient,r.dos);
-  downloadPDF(nuCurrentPDF.dataURL,filename);
+
+  // Show uploading state
+  const btn=document.getElementById('nu-btn-submit');
+  btn.disabled=true;btn.textContent='Uploading to OneDrive...';
+  showToast('Uploading PDF to OneDrive...','');
+
+  // Try to upload to OneDrive Pathways Notes folder
+  let uploadedToOneDrive=false;
+  try {
+    const token=await getToken();
+    if(token){
+      // Convert dataURL to binary
+      const b64=nuCurrentPDF.dataURL.split(',')[1];
+      const binary=atob(b64);
+      const bytes=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+      const blob=new Blob([bytes],{type:'application/pdf'});
+
+      // Upload to Pathways Notes folder
+      const uploadURL=`https://graph.microsoft.com/v1.0/users/${OWNER_EMAIL}/drive/root:/Pathways%20Beta/Pathways%20Notes/${encodeURIComponent(filename)}:/content`;
+      const res=await fetch(uploadURL,{
+        method:'PUT',
+        headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/pdf'},
+        body:blob
+      });
+      if(res.ok){
+        uploadedToOneDrive=true;
+        console.log('PDF uploaded to OneDrive:',filename);
+      } else {
+        const err=await res.text();
+        console.error('PDF upload failed:',res.status,err);
+      }
+    }
+  } catch(e){
+    console.error('PDF upload error:',e);
+  }
+
   // Update log entry with filename
   log[idx].pdfFilename=filename;
+  log[idx].pdfUploadedToOneDrive=uploadedToOneDrive;
   saveState();updateNotesBadges();
+
   nuLastDownload={dataURL:nuCurrentPDF.dataURL,filename};
-  nuSessionUploads.push({claimNum:r.claimNum,patient:r.patient,filename,dataURL:nuCurrentPDF.dataURL,ts:Date.now()});
+  nuSessionUploads.push({claimNum:r.claimNum,patient:r.patient,filename,dataURL:nuCurrentPDF.dataURL,ts:Date.now(),uploaded:uploadedToOneDrive});
+
+  // Reset button
+  btn.disabled=false;btn.textContent='Download & Submit Note';
+
+  // Show success
   document.getElementById('nu-card').style.display='none';
   const succ=document.getElementById('nu-success');succ.style.display='block';succ.classList.add('show');
   document.getElementById('nu-success-filename').textContent=filename;
+
+  // Update success message based on upload result
+  const subEl=document.querySelector('.nu-success-sub');
+  if(subEl){
+    if(uploadedToOneDrive){
+      subEl.innerHTML='✅ PDF uploaded directly to the <strong>Pathways Notes</strong> OneDrive folder.<br>Ashleigh can access it there automatically.';
+    } else {
+      subEl.innerHTML='⚠️ Could not upload to OneDrive automatically.<br>Please download the PDF and move it to the <strong>Pathways Notes</strong> folder manually.';
+    }
+  }
+
   nuRenderSessionUploads();
   if(currentRole==='pathways')nuRefreshClaims();
+  showToast(uploadedToOneDrive?`PDF uploaded to OneDrive ✓`:`PDF ready — move to Pathways Notes folder`,'green');
 }
 function nuRedownload(){if(nuLastDownload)downloadPDF(nuLastDownload.dataURL,nuLastDownload.filename);showToast('Re-downloading...','green');}
 function nuReset(){
@@ -1535,8 +1628,11 @@ function nuRenderSessionUploads(){
   section.style.display='block';count.textContent=nuSessionUploads.length;
   list.innerHTML=nuSessionUploads.map((u,i)=>`
     <div class="su-item">
-      <span class="su-icon">📄</span>
-      <div class="su-info"><div class="su-filename" title="${u.filename}">${u.filename}</div><div class="su-meta">${u.patient} · ${fmtTime(u.ts)}</div></div>
+      <span class="su-icon">${u.uploaded?'✅':'📄'}</span>
+      <div class="su-info">
+        <div class="su-filename" title="${u.filename}">${u.filename}</div>
+        <div class="su-meta">${u.patient} · ${fmtTime(u.ts)} · ${u.uploaded?'<span style="color:var(--green)">Uploaded to OneDrive</span>':'<span style="color:var(--amber)">Manual upload needed</span>'}</div>
+      </div>
       <button class="su-btn" onclick="nuRedownloadItem(${i})">Re-download</button>
     </div>`).join('');
 }
