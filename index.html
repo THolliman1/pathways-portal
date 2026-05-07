@@ -1452,7 +1452,17 @@ function submitCard(id){
   log.push({submittedAt:Date.now(),dateReceived:dateRec,submittedBy,patient:name,dob,dos,provider,claimNum,notes,lines,patientTotal:lines.reduce((s,l)=>s+l.total,0),status:'needs-export',pdfFilename:null});
   markSubmitted(id);updateBadge();updateNotesBadges();saveState();
   showToast(`${name} (${claimNum}) logged ✓`,'green');
-  setTimeout(()=>{const container=document.getElementById('cards-container');const next=container?.querySelector('[data-card-id]:not(.submitted)');if(next){const nid=next.dataset.cardId;toggleBody(nid,true);next.scrollIntoView({behavior:'smooth',block:'nearest'});}},300);
+  // Only auto-open next card if there is one already existing — don't create a new one
+  setTimeout(()=>{
+    const container=document.getElementById('cards-container');
+    const next=container?.querySelector('[data-card-id]:not(.submitted)');
+    if(next){
+      const nid=next.dataset.cardId;
+      toggleBody(nid,true);
+      next.scrollIntoView({behavior:'smooth',block:'nearest'});
+    }
+    // No auto-add — let user click + Add Patient when ready
+  },300);
 }
 function markSubmitted(id){
   const card=document.querySelector(`[data-card-id="${id}"]`);if(!card)return;
@@ -1474,7 +1484,8 @@ function nuRefreshClaims(){
   const select=document.getElementById('nu-claim-select');
   select.innerHTML='<option value="">— Select a submitted claim —</option>';
   submittedClaims.forEach((r,i)=>{
-    const opt=document.createElement('option');opt.value=i;
+    const opt=document.createElement('option');
+    opt.value=r.claimNum; // use claimNum as value — stable even if log reloads
     const hasPDF=r.pdfFilename?' ✓':'';
     opt.textContent=`${r.claimNum} — ${r.patient} — DOS: ${fmtDate(r.dos)}${hasPDF}`;
     if(r.pdfFilename)opt.style.color='#2E8B6A';
@@ -1482,12 +1493,13 @@ function nuRefreshClaims(){
   });
 }
 function nuOnClaimSelect(){
-  const idx=document.getElementById('nu-claim-select').value;
+  const selectedVal=document.getElementById('nu-claim-select').value;
   const preview=document.getElementById('nu-preview');
   const alreadyWarn=document.getElementById('nu-already-warn');
   nuResetDrop();
-  if(idx===''){preview.classList.remove('show');nuUpdateSubmitBtn();return;}
-  const r=log[parseInt(idx)];
+  if(!selectedVal){preview.classList.remove('show');nuUpdateSubmitBtn();return;}
+  const r=log.find(l=>l.claimNum===selectedVal);
+  if(!r){preview.classList.remove('show');nuUpdateSubmitBtn();return;}
   document.getElementById('nu-cp-num').textContent=r.claimNum;
   document.getElementById('nu-cp-patient').textContent=r.patient;
   document.getElementById('nu-cp-provider').textContent=r.provider;
@@ -1530,20 +1542,27 @@ function nuResetDrop(){
   nuUpdateSubmitBtn();
 }
 function nuUpdateFilenamePreview(){
-  const idx=document.getElementById('nu-claim-select').value;
+  const selectedVal=document.getElementById('nu-claim-select').value;
   const preview=document.getElementById('nu-filename-preview');
-  if(idx===''||!nuCurrentPDF){preview.classList.remove('show');return;}
-  const r=log[parseInt(idx)];
+  if(!selectedVal||!nuCurrentPDF){preview.classList.remove('show');return;}
+  const r=log.find(l=>l.claimNum===selectedVal);
+  if(!r){preview.classList.remove('show');return;}
   document.getElementById('nu-fpb-name').textContent=buildPDFFilename(r.claimNum,r.patient,r.dos);
   preview.classList.add('show');
 }
 function nuUpdateSubmitBtn(){
-  const idx=document.getElementById('nu-claim-select').value;
-  document.getElementById('nu-btn-submit').disabled=(idx===''||!nuCurrentPDF);
+  const selectedVal=document.getElementById('nu-claim-select').value;
+  document.getElementById('nu-btn-submit').disabled=(!selectedVal||!nuCurrentPDF);
 }
 async function nuSubmit(){
-  const idx=parseInt(document.getElementById('nu-claim-select').value);
-  const r=log[idx];if(!r||!nuCurrentPDF)return;
+  const selectEl=document.getElementById('nu-claim-select');
+  const selectedVal=selectEl.value;
+  if(!selectedVal){showToast('Please select a claim','red');return;}
+
+  // Look up by claimNum — more stable than array index
+  const r=log.find(l=>l.claimNum===selectedVal);
+  if(!r||!nuCurrentPDF){showToast('Missing claim or PDF','red');return;}
+  const idx=log.indexOf(r);
   const filename=buildPDFFilename(r.claimNum,r.patient,r.dos);
 
   // Show uploading state
