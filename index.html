@@ -914,10 +914,16 @@ const MSAL_CONFIG = {
 const GRAPH_SCOPES = ['Files.ReadWrite.All', 'User.Read'];
 const DATA_FILE = 'claims_data.json';
 const FOLDER_PATH = 'Pathways Beta';
+// Owner's drive ID — everyone reads/writes to this specific file
+const OWNER_EMAIL = 'tholliman@orthoplusclinic.com';
 
-// Build the correct Graph API URL for the file
+// Get file URL — always points to owner's OneDrive file
+// Uses /users/{email}/drive for shared access
 function getFileURL() {
-  return `https://graph.microsoft.com/v1.0/me/drive/root:/Pathways%20Beta/${DATA_FILE}:/content`;
+  return `https://graph.microsoft.com/v1.0/users/${OWNER_EMAIL}/drive/root:/Pathways%20Beta/${DATA_FILE}:/content`;
+}
+function getFileMetaURL() {
+  return `https://graph.microsoft.com/v1.0/users/${OWNER_EMAIL}/drive/root:/Pathways%20Beta/${DATA_FILE}`;
 }
 
 let msalInstance = null;
@@ -925,6 +931,8 @@ let msalAccount = null;
 let syncTimer = null;
 let lastSyncedData = null;
 let syncEnabled = false;
+let currentETag = null;
+let isSaving = false; // prevent concurrent saves
 
 // Init MSAL
 async function initMSAL() {
@@ -999,22 +1007,24 @@ async function loadFromOneDrive() {
     const token = await getToken();
     if (!token) { showSyncBar('error', 'Could not get access token — check sign-in'); return; }
 
-    const url = getFileURL();
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    // Get file with eTag using metadata endpoint
+    const metaRes = await fetch(
+      getFileMetaURL(),
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
 
-    if (res.status === 404) {
-      // File doesn't exist yet — fresh start
+    if (metaRes.status === 404) {
       showSyncBar('synced', `Ready · ${msalAccount?.username || 'user'} · No data yet`);
       if (currentRole === 'pathways') { const c=document.getElementById('cards-container');if(c&&c.children.length===0)addCard(false); }
       startPolling();
       return;
     }
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('OneDrive load error:', res.status, errText);
-      throw new Error(`HTTP ${res.status}: ${errText}`);
-    }
+    if (!metaRes.ok) throw new Error(`Meta HTTP ${metaRes.status}`);
+    const meta = await metaRes.json();
+    currentETag = meta['@microsoft.graph.downloadUrl'] ? meta.eTag : null;
+
+    const res = await fetch(getFileURL(), { headers: { Authorization: `Bearer ${token}` } });
 
     const data = await res.json();
     lastSyncedData = JSON.stringify(data);
@@ -1075,35 +1085,69 @@ async function saveToOneDrive() {
   const dataStr = JSON.stringify(data, null, 2);
 
   if (dataStr === lastSyncedData) return;
+  if (isSaving) { console.log('Save already in progress — skipping'); return; }
 
+  isSaving = true;
   showSyncBar('syncing', 'Saving to OneDrive...');
   try {
     const token = await getToken();
     if (!token) {
       saveToLocalStorage();
       showSyncBar('error','No token — check Microsoft sign-in');
+      isSaving = false;
       return;
     }
 
-    // Log what we're trying to do
     console.log('Saving to:', getFileURL());
     console.log('Token acquired for:', msalAccount?.username);
 
-    const url = getFileURL();
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: dataStr
-    });
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+    // Use eTag to prevent conflicts if we have one
+    if (currentETag) headers['If-Match'] = currentETag;
 
-    if (!res.ok) {
+    const url = getFileURL();
+    const res = await fetch(url, { method: 'PUT', headers, body: dataStr });
+
+    if (res.status === 409 || res.status === 412) {
+      // Conflict — refresh eTag and retry once
+      console.warn('Conflict on save — refreshing eTag and retrying');
+      const metaRes = await fetch(
+        getFileMetaURL(),
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (metaRes.ok) {
+        const meta = await metaRes.json();
+        currentETag = meta.eTag || null;
+      }
+      // Retry without eTag
+      const retry = await fetch(url, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: dataStr
+      });
+      if (!retry.ok) {
+        const errText = await retry.text();
+        throw new Error(`Retry HTTP ${retry.status}: ${errText}`);
+      }
+      const retryData = await retry.json();
+      currentETag = retryData.eTag || null;
+    } else if (!res.ok) {
       const errText = await res.text();
       console.error('OneDrive save error:', res.status, errText);
-      // Show exact error in sync bar so we can diagnose
       showSyncBar('error', `Save failed: HTTP ${res.status} — check console`);
       saveToLocalStorage();
+      isSaving = false;
       return;
+    } else {
+      try {
+        const resData = await res.json();
+        currentETag = resData.eTag || null;
+      } catch(e) {}
     }
+
     lastSyncedData = dataStr;
     showSyncBar('synced', `Saved to OneDrive ✓ · ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`);
     saveToLocalStorage();
@@ -1113,6 +1157,7 @@ async function saveToOneDrive() {
     showSyncBar('error', `Save error: ${e.message}`);
     saveToLocalStorage();
   }
+  isSaving = false;
 }
 
 // Poll for changes from other users
@@ -1194,7 +1239,7 @@ function loadFromLocalStorage() {
   } catch(e) { if(currentRole==='pathways')addCard(false); }
 }
 let isRestoring = false;
-function autosave(){if(isRestoring)return;clearTimeout(saveTimer);saveTimer=setTimeout(saveState,1500);}
+function autosave(){if(isRestoring)return;clearTimeout(saveTimer);saveTimer=setTimeout(saveState,3000);}
 function saveState(){
   const dot=document.getElementById('save-dot'),lbl=document.getElementById('save-label');
   if(dot)dot.classList.add('saving');if(lbl)lbl.textContent='Saving…';
