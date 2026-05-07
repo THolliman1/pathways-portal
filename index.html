@@ -646,6 +646,7 @@ table.notes tbody tr.missing-row:hover td{background:#FFF0CC}
         <div class="log-sub" id="log-sub">No claims yet</div>
       </div>
       <div class="log-actions">
+        <a class="btn-secondary" href="https://orthoplusclinic-my.sharepoint.com/my?id=%2Fpersonal%2Ftholliman%5Forthoplusclinic%5Fcom%2FDocuments%2FPathways%20Beta%2FPathways%20Notes&viewid=ce89f7a7%2Df368%2D4767%2Db674%2D0a5d84818105" target="_blank" id="btn-notes-folder" style="text-decoration:none;display:none">📁 Open Notes Folder</a>
         <button class="btn-secondary" onclick="confirmClearLog()">Clear Log</button>
         <button class="btn-primary" onclick="exportCSV(null)" id="btn-export-all">Export All CSV</button>
       </div>
@@ -796,11 +797,20 @@ const fmtTime=ts=>{const d=new Date(ts);return d.toLocaleString('en-US',{month:'
 const today=()=>new Date().toISOString().split('T')[0];
 const val=id=>{const el=document.getElementById(id);return el?el.value:''};
 const sanitizeClaim=raw=>raw.toString().trim().replace(/[^a-zA-Z0-9]/g,'').toUpperCase();
-const fmtClaimNum=raw=>raw?sanitizeClaim(raw)+'PPC':'';
+const fmtClaimNum=raw=>raw?sanitizeClaim(raw)+'-PPC':'';
 const buildPDFFilename=(claimNum,patient,dos)=>{
-  const np=patient.replace(/[^a-zA-Z0-9,\s]/g,'').replace(/,\s*/g,'_').replace(/\s+/g,'_');
-  return[claimNum,np,dos?`DOS-${dos}`:''].filter(Boolean).join('_')+'.pdf';
+  // Format: Holliman T Note 01012026-PPC.pdf
+  // patient is "Last, First" format
+  const parts=patient.replace(/[^a-zA-Z0-9,\s]/g,'').split(',');
+  const lastName=(parts[0]||'').trim();
+  const firstName=(parts[1]||'').trim();
+  const firstInitial=firstName?firstName.charAt(0).toUpperCase():'';
+  // Format DOS from YYYY-MM-DD to MMDDYYYY
+  let dosFormatted='';
+  if(dos){const[y,m,d]=dos.split('-');dosFormatted=`${m}${d}${y}`;}
+  return`${lastName} ${firstInitial} Note ${dosFormatted}-PPC.pdf`.trim();
 };
+const NOTES_FOLDER_URL='https://orthoplusclinic-my.sharepoint.com/my?id=%2Fpersonal%2Ftholliman%5Forthoplusclinic%5Fcom%2FDocuments%2FPathways%20Beta%2FPathways%20Notes&viewid=ce89f7a7%2Df368%2D4767%2Db674%2D0a5d84818105';
 const fmtSize=b=>b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB';
 
 function showToast(msg,type){
@@ -1358,7 +1368,7 @@ function refreshCard(id){
   document.getElementById(`pname-${id}`).textContent=name||`Patient ${id}`;
   document.getElementById(`pnum-${id}`).className=name?'p-num filled':'p-num';
   const hint=document.getElementById(`claim-hint-${id}`);
-  if(hint)hint.innerHTML=claimRaw?`Will export as <strong>${sanitizeClaim(claimRaw)}PPC</strong>`:'Will export as <strong>—PPC</strong>';
+  if(hint)hint.innerHTML=claimRaw?`Will export as <strong>${sanitizeClaim(claimRaw)}-PPC</strong>`:'Will export as <strong>—-PPC</strong>';
   const parts=[provider?provider.split(',')[0]:'',dos?`DOS: ${fmtDate(dos)}`:'',lineCount?`${lineCount} line${lineCount>1?'s':''}  ${fmt(total)}`:''].filter(Boolean);
   document.getElementById(`pmeta-${id}`).textContent=parts.join('  ·  ')||'—';
   document.getElementById(`lf-count-${id}`).textContent=lineCount;
@@ -1600,6 +1610,8 @@ function renderLog(){
   document.getElementById('helix-bar').style.display=hasData?'flex':'none';
   document.getElementById('cycle-panel').style.display=hasData?'block':'none';
   document.getElementById('status-filter-bar').style.display=hasData?'flex':'none';
+  const notesBtn=document.getElementById('btn-notes-folder');
+  if(notesBtn)notesBtn.style.display=hasData?'inline-flex':'none';
   const exportAllBtn=document.getElementById('btn-export-all');
   const filterActive=val('cycle-from')||val('cycle-to');
   if(exportAllBtn)exportAllBtn.textContent=filterActive?'Export All CSV (unfiltered)':'Export All CSV';
@@ -1649,7 +1661,14 @@ function buildCSVRows(dataset){
   return[headers.join(','),...rows].join('\n');
 }
 function exportCSV(dataset){
-  const data=dataset||log;if(!data.length){showToast('No claims to export');return;}
+  const data=dataset||log;
+  if(!data.length){showToast('No claims to export');return;}
+  // Warn about missing notes
+  const missingNotes=data.filter(r=>!r.pdfFilename);
+  if(missingNotes.length>0){
+    const names=missingNotes.map(r=>r.patient).join(', ');
+    if(!confirm(`⚠️ ${missingNotes.length} patient${missingNotes.length>1?'s are':' is'} missing clinical notes:\n\n${names}\n\nExport CSV anyway?`))return;
+  }
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([buildCSVRows(data)],{type:'text/csv'})),download:`Pathways_Claims_${today()}.csv`});a.click();
   showToast(`Exported ${data.reduce((s,r)=>s+r.lines.length,0)} lines for ${data.length} patients`,'green');
 }
@@ -1669,6 +1688,11 @@ function updateCyclePreview(){
 }
 function exportFilteredCSV(){
   const filtered=getFilteredLog();if(!filtered?.length){showToast('No claims match that date range');return;}
+  const missingNotes=filtered.filter(r=>!r.pdfFilename);
+  if(missingNotes.length>0){
+    const names=missingNotes.map(r=>r.patient).join(', ');
+    if(!confirm(`⚠️ ${missingNotes.length} patient${missingNotes.length>1?'s are':' is'} missing clinical notes:\n\n${names}\n\nExport CSV anyway?`))return;
+  }
   const to=val('cycle-to'),from=val('cycle-from'),suffix=to?`thru_${to}`:from?`from_${from}`:today();
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([buildCSVRows(filtered)],{type:'text/csv'})),download:`Pathways_Claims_Cycle_${suffix}.csv`});a.click();
   showToast(`Exported ${filtered.reduce((s,r)=>s+r.lines.length,0)} lines for ${filtered.length} patients`,'green');
