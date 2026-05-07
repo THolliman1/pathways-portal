@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Pathways Portal — OPM</title>
 <!-- Microsoft Authentication Library -->
-<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<script src="https://unpkg.com/@azure/msal-browser@3.10.0/lib/msal-browser.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -904,10 +904,12 @@ const MSAL_CONFIG = {
   auth: {
     clientId: '2d743f1f-aa6d-478f-9bfc-985829914e48',
     authority: 'https://login.microsoftonline.com/066313fa-9d02-4763-8f69-64e1f5d36fe7',
-    redirectUri: window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '/') || 'https://tholliman1.github.io/pathways-portal',
+    redirectUri: 'https://tholliman1.github.io/pathways-portal',
+    postLogoutRedirectUri: 'https://tholliman1.github.io/pathways-portal',
     navigateToLoginRequestUrl: false,
   },
-  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
+  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+  system: { loggerOptions: { logLevel: 0 } }
 };
 const GRAPH_SCOPES = ['Files.ReadWrite.All', 'User.Read'];
 const DATA_FILE = 'claims_data.json';
@@ -949,14 +951,19 @@ async function msalSignIn() {
   try {
     showSyncBar('syncing', 'Signing in...');
     document.getElementById('signin-overlay').classList.add('hidden');
-    const result = await msalInstance.loginPopup({ scopes: GRAPH_SCOPES });
+    const result = await msalInstance.loginPopup({
+      scopes: GRAPH_SCOPES,
+      prompt: 'select_account'
+    });
     msalAccount = result.account;
-    await syncEnabled_set(true);
+    syncEnabled = true;
+    console.log('Signed in as:', msalAccount.username);
     await loadFromOneDrive();
   } catch(e) {
     console.warn('Sign in failed:', e);
     showSyncBar('error', 'Sign in failed — using local storage');
     syncEnabled = false;
+    loadFromLocalStorage();
   }
 }
 
@@ -1067,13 +1074,20 @@ async function saveToOneDrive() {
     updatedBy: msalAccount?.username || 'unknown' };
   const dataStr = JSON.stringify(data, null, 2);
 
-  // Don't save if nothing changed
   if (dataStr === lastSyncedData) return;
 
   showSyncBar('syncing', 'Saving to OneDrive...');
   try {
     const token = await getToken();
-    if (!token) { saveToLocalStorage(); showSyncBar('error','Could not get token — saved locally'); return; }
+    if (!token) {
+      saveToLocalStorage();
+      showSyncBar('error','No token — check Microsoft sign-in');
+      return;
+    }
+
+    // Log what we're trying to do
+    console.log('Saving to:', getFileURL());
+    console.log('Token acquired for:', msalAccount?.username);
 
     const url = getFileURL();
     const res = await fetch(url, {
@@ -1085,15 +1099,18 @@ async function saveToOneDrive() {
     if (!res.ok) {
       const errText = await res.text();
       console.error('OneDrive save error:', res.status, errText);
-      throw new Error(`HTTP ${res.status}`);
+      // Show exact error in sync bar so we can diagnose
+      showSyncBar('error', `Save failed: HTTP ${res.status} — check console`);
+      saveToLocalStorage();
+      return;
     }
     lastSyncedData = dataStr;
-    showSyncBar('synced', `Saved · ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`);
+    showSyncBar('synced', `Saved to OneDrive ✓ · ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`);
     saveToLocalStorage();
 
   } catch(e) {
-    console.warn('OneDrive save failed:', e);
-    showSyncBar('error', 'OneDrive save failed — saved locally');
+    console.error('OneDrive save exception:', e);
+    showSyncBar('error', `Save error: ${e.message}`);
     saveToLocalStorage();
   }
 }
@@ -1673,21 +1690,33 @@ function gateSubmit(){
 });
 // Check gate password
 if(!localStorage.getItem('opm_gate_pass')){
-  // Gate stays visible — user must enter password first
+  // Gate stays visible
 } else {
   document.getElementById('gate-screen').classList.add('hidden');
 }
 document.getElementById('prov-date').value=today();
 
-// Initialize MSAL then restore role
+// Initialize MSAL v3 then restore role
 (async()=>{
   try {
     msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
     await msalInstance.initialize();
-    const accounts = msalInstance.getAllAccounts();
-    if(accounts.length>0){ msalAccount=accounts[0]; syncEnabled=true; }
-  } catch(e){ console.warn('MSAL init error:',e); }
-
+    // Handle redirect response first (important for popup/redirect flow)
+    try {
+      const response = await msalInstance.handleRedirectPromise();
+      if(response){ msalAccount = response.account; syncEnabled = true; }
+    } catch(e){ console.warn('Redirect handling:', e); }
+    // Check for existing accounts
+    if(!msalAccount){
+      const accounts = msalInstance.getAllAccounts();
+      if(accounts.length > 0){ msalAccount = accounts[0]; syncEnabled = true; }
+    }
+    if(msalAccount) console.log('MSAL ready — signed in as:', msalAccount.username);
+    else console.log('MSAL ready — no account signed in yet');
+  } catch(e){
+    console.warn('MSAL init error:',e);
+    showSyncBar('error', 'Microsoft auth unavailable — data saves locally only');
+  }
   const savedRole=localStorage.getItem(LS+'role');
   if(savedRole==='pathways'){ applyRole('pathways'); }
   else if(savedRole==='opm'){ document.getElementById('role-screen').classList.add('hidden'); document.getElementById('pin-screen').classList.remove('hidden'); }
