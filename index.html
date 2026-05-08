@@ -1859,9 +1859,9 @@ document.addEventListener('keydown',e=>{
 });
 
 // ── Email Notifications ──────────────────────────────────────
-const EMAILJS_SERVICE_ID  = 'service_pathways';   // Set after EmailJS setup
-const EMAILJS_TEMPLATE_ID = 'template_pathways';  // Set after EmailJS setup
-const EMAILJS_PUBLIC_KEY  = 'REPLACE_WITH_KEY';   // Set after EmailJS setup
+const EMAILJS_SERVICE_ID  = 'service_wnl5tqf';
+const EMAILJS_TEMPLATE_ID = 'b242g9w';
+const EMAILJS_PUBLIC_KEY  = 'LY-qLHNukOqi3n9lO';
 const ASHLEIGH_EMAIL      = 'ahillin@opmbilling.com';
 
 let pendingNotificationClaims = []; // collect claims before sending batch notification
@@ -1939,6 +1939,9 @@ if(!localStorage.getItem('opm_gate_pass')){
   document.getElementById('gate-screen').classList.add('hidden');
 }
 document.getElementById('prov-date').value=today();
+
+// Initialize EmailJS
+try { emailjs.init(EMAILJS_PUBLIC_KEY); console.log('EmailJS ready'); } catch(e){ console.warn('EmailJS init failed:', e); }
 
 // Initialize MSAL v3 then restore role
 (async()=>{
