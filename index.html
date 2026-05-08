@@ -6,6 +6,8 @@
 <title>Pathways Portal — OPM</title>
 <!-- Microsoft Authentication Library -->
 <script src="https://unpkg.com/@azure/msal-browser@3.10.0/lib/msal-browser.min.js"></script>
+<!-- EmailJS for notifications -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -1446,12 +1448,19 @@ function submitCard(id){
   const name=val(`pt-name-${id}`).trim(),dob=val(`pt-dob-${id}`),dos=val(`pt-dos-${id}`),provider=val(`pt-prov-${id}`),claimRaw=val(`pt-claim-${id}`).trim(),notes=val(`pt-notes-${id}`).trim();
   const submittedBy=val('prov-contact').trim(),dateRec=val('prov-date')||today(),claimNum=fmtClaimNum(claimRaw);
   if(!name||!dob||!dos||!provider||!claimRaw){showToast('Please fill all required fields','red');return;}
+  // Duplicate claim check
+  const existing=log.find(r=>r.claimNum===claimNum);
+  if(existing){
+    if(!confirm(`⚠️ Claim ${claimNum} already exists in the log for ${existing.patient} (DOS: ${fmtDate(existing.dos)}).\n\nSubmit again anyway?`))return;
+  }
   const lines=[];
   document.getElementById(`lines-body-${id}`)?.querySelectorAll('[data-line-id]').forEach(tr=>{const lid=tr.dataset.lineId;const cpt=val(`lcpt-${id}-${lid}`);const units=Math.max(1,parseInt(val(`lunits-${id}-${lid}`))||1);if(cpt&&FEES[cpt])lines.push({cptCode:cpt,cptDesc:FEES[cpt].desc,units,rate:FEES[cpt].rate,total:FEES[cpt].rate*units});});
   if(lines.length===0){showToast('Add at least one service line','red');return;}
   log.push({submittedAt:Date.now(),dateReceived:dateRec,submittedBy,patient:name,dob,dos,provider,claimNum,notes,lines,patientTotal:lines.reduce((s,l)=>s+l.total,0),status:'needs-export',pdfFilename:null});
   markSubmitted(id);updateBadge();updateNotesBadges();saveState();
   showToast(`${name} (${claimNum}) logged ✓`,'green');
+  // Queue email notification to Ashleigh
+  queueNotification(name, claimNum, submittedBy);
   // Only auto-open next card if there is one already existing — don't create a new one
   setTimeout(()=>{
     const container=document.getElementById('cards-container');
@@ -1849,13 +1858,64 @@ document.addEventListener('keydown',e=>{
   }
 });
 
-// ── Password Gate ────────────────────────────────────────────
-const GATE_PASSWORD = 'PathwaysTest2016';
-function gateSubmit(){
+// ── Email Notifications ──────────────────────────────────────
+const EMAILJS_SERVICE_ID  = 'service_pathways';   // Set after EmailJS setup
+const EMAILJS_TEMPLATE_ID = 'template_pathways';  // Set after EmailJS setup
+const EMAILJS_PUBLIC_KEY  = 'REPLACE_WITH_KEY';   // Set after EmailJS setup
+const ASHLEIGH_EMAIL      = 'ahillin@opmbilling.com';
+
+let pendingNotificationClaims = []; // collect claims before sending batch notification
+let notificationTimer = null;
+
+function queueNotification(patientName, claimNum, submittedBy) {
+  pendingNotificationClaims.push({patientName, claimNum, submittedBy});
+  clearTimeout(notificationTimer);
+  // Batch notifications — send after 5 seconds of no new submissions
+  notificationTimer = setTimeout(sendBatchNotification, 5000);
+}
+
+async function sendBatchNotification() {
+  if(!pendingNotificationClaims.length) return;
+  if(EMAILJS_PUBLIC_KEY === 'REPLACE_WITH_KEY') {
+    console.log('EmailJS not configured — notification skipped');
+    pendingNotificationClaims = [];
+    return;
+  }
+  try {
+    const count = pendingNotificationClaims.length;
+    const claimList = pendingNotificationClaims
+      .map(c=>`• ${c.patientName} (${c.claimNum})`)
+      .join('\n');
+    const submittedBy = pendingNotificationClaims[0].submittedBy || 'Pathways Staff';
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: ASHLEIGH_EMAIL,
+      to_name: 'Ashleigh',
+      from_name: 'Pathways Portal',
+      submitted_by: submittedBy,
+      claim_count: count,
+      claim_list: claimList,
+      portal_url: 'https://tholliman1.github.io/pathways-portal',
+      date: new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})
+    }, EMAILJS_PUBLIC_KEY);
+    console.log(`Notification sent to ${ASHLEIGH_EMAIL} for ${count} claim(s)`);
+  } catch(e) {
+    console.warn('Email notification failed:', e);
+  }
+  pendingNotificationClaims = [];
+}
+// Password is hashed — plain text never stored in code
+const GATE_HASH = '43057931aa6c9e1f20679f6e961807b6f4cde14690794b8e08b83a26f5ea25d1'; // SHA-256 of PathwaysTest2016
+async function hashPassword(pw){
+  const msgBuffer=new TextEncoder().encode(pw);
+  const hashBuffer=await crypto.subtle.digest('SHA-256',msgBuffer);
+  return Array.from(new Uint8Array(hashBuffer)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function gateSubmit(){
   const input=document.getElementById('gate-input');
   const errEl=document.getElementById('gate-error');
-  const val=input.value.trim();
-  if(val===GATE_PASSWORD){
+  const pw=input.value.trim();
+  const hashed=await hashPassword(pw);
+  if(hashed===GATE_HASH){
     document.getElementById('gate-screen').classList.add('hidden');
     localStorage.setItem('opm_gate_pass','1');
     errEl.textContent='';
